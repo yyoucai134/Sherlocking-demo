@@ -14,10 +14,8 @@
 #   skills/  → /app/skills（用户上传 skill）
 #
 # Sandbox:
-#   容器内默认 Local sandbox（SHERLOCKING_SANDBOX_EXECUTOR=local）。
-#   如需 Docker 隔离 sandbox，取消下方 docker.sock 挂载注释 + 改 .env:
-#     SHERLOCKING_SANDBOX_USE=sherlocking.backend.agents.sandbox.docker.docker_sandbox_provider:DockerSandboxProvider
-#     SHERLOCKING_SANDBOX_EXECUTOR=local
+#   Docker 部署默认按 .env.example 使用 Docker 隔离 sandbox。
+#   本机开发如不使用 Docker，可在 .env 中显式改为空或切换 LocalSandboxProvider。
 
 services:
   sherlocking:
@@ -34,12 +32,20 @@ services:
       - SHERLOCKING_MEMORY_USE=default
       - SHERLOCKING_MEMORY_PHASE2_ENABLED=true
       - SHERLOCKING_MULTIAGENT_ENABLED=true
+      - SHERLOCKING_SANDBOX_USE=${SHERLOCKING_SANDBOX_USE:-sherlocking.backend.agents.sandbox.docker.docker_sandbox_provider:DockerSandboxProvider}
+      - SHERLOCKING_SANDBOX_REPLICAS=${SHERLOCKING_SANDBOX_REPLICAS:-1}
+      - SHERLOCKING_SANDBOX_IDLE_TIMEOUT=${SHERLOCKING_SANDBOX_IDLE_TIMEOUT:-300}
+      - SHERLOCKING_SANDBOX_HOST=${SHERLOCKING_SANDBOX_HOST:-host.docker.internal}
+      - SHERLOCKING_SANDBOX_BIND_HOST=${SHERLOCKING_SANDBOX_BIND_HOST:-0.0.0.0}
+      - SHERLOCKING_SANDBOX_EXECUTOR=${SHERLOCKING_SANDBOX_EXECUTOR:-local}
     volumes:
       - ./.sherlocking:/app/.sherlocking   # 运行时数据持久化（DB/logs/memory/artifacts）
       - ./skills:/app/skills     # 用户 skill 持久化
       - ./.env:/app/.env         # .env 持久化（Ctrl+B 面板可写回）
-      # Docker sandbox 模式：挂载宿主机 docker.sock（Linux/Mac）
-      # - /var/run/docker.sock:/var/run/docker.sock
+      # Docker sandbox 模式：挂载宿主机 docker.sock（Linux）
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 默认无 command，走 ENTRYPOINT 的 sherlocking（TUI 模式）
     # 覆盖示例: docker compose run --rm sherlocking cli
     #           docker compose run --rm sherlocking run "研究问题"

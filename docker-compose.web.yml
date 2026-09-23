@@ -8,7 +8,8 @@
 #   更新代码后重建:  docker compose -f docker-compose.web.yml up -d --build
 #
 # 访问地址: http://服务器公网IP:8080
-# 前提: 阿里云安全组已放行 8080 端口(TCP)；项目根目录的 .env 中已填写 DEEPSEEK_API_KEY
+# 前提: Ubuntu Docker Engine 已运行；项目根目录的 .env 中已填写
+# DEEPSEEK_API_KEY、SHERLOCKING_WEB_AUTH_TOKEN，并已按需拉取沙箱镜像。
 
 services:
   sherlocking-web:
@@ -27,8 +28,15 @@ services:
       # 2核2G 小机器：显式关闭网页用不到的重量级功能，只保留"网页对话 + 记忆"
       # multiagent 会尝试拉起外部编码助手(pi/codex/claude)，纯网页聊天不需要
       - SHERLOCKING_MULTIAGENT_ENABLED=false
-      # 不启用 Docker 沙箱（沙箱是给 agent 执行代码用的，还会额外吃资源）
-      - SHERLOCKING_SANDBOX_USE=
+      # 生产默认使用 Docker 沙箱；Local Sandbox 仅建议本地开发显式开启。
+      - SHERLOCKING_SANDBOX_USE=${SHERLOCKING_SANDBOX_USE:-sherlocking.backend.agents.sandbox.docker.docker_sandbox_provider:DockerSandboxProvider}
+      # Ubuntu 2C2G：只保留一个可复用沙箱，空闲 5 分钟销毁。
+      - SHERLOCKING_SANDBOX_REPLICAS=${SHERLOCKING_SANDBOX_REPLICAS:-1}
+      - SHERLOCKING_SANDBOX_IDLE_TIMEOUT=${SHERLOCKING_SANDBOX_IDLE_TIMEOUT:-300}
+      # 沙箱端口发布到宿主机，Web 容器经 host-gateway 回连。
+      - SHERLOCKING_SANDBOX_HOST=${SHERLOCKING_SANDBOX_HOST:-host.docker.internal}
+      - SHERLOCKING_SANDBOX_BIND_HOST=${SHERLOCKING_SANDBOX_BIND_HOST:-0.0.0.0}
+      - SHERLOCKING_SANDBOX_EXECUTOR=${SHERLOCKING_SANDBOX_EXECUTOR:-local}
       # 日志级别：INFO=默认（对话轨迹/工具调用）；排查疑难时改 DEBUG（含思考流/预算/框架细节）
       # 改完执行 docker compose -f docker-compose.web.yml up -d 即生效，无需重新构建
       - SHERLOCKING_LOG_LEVEL=INFO
@@ -37,7 +45,12 @@ services:
     ports:
       # 宿主机 80 端口 -> 容器 8080 端口（公网部署用 80，服务器内部仍是 8080）
       - "80:8080"
+    extra_hosts:
+      # Ubuntu 20.10+ / Docker Engine：让容器访问宿主机映射端口。
+      - "host.docker.internal:host-gateway"
     volumes:
       # 数据持久化：对话记忆、日志、产物重启不丢
       - ./.sherlocking:/app/.sherlocking
       - ./skills:/app/skills
+      # Docker Sandbox Provider 需要创建/销毁独立沙箱容器。
+      - /var/run/docker.sock:/var/run/docker.sock
