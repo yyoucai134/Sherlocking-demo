@@ -14,7 +14,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import os
+import posixpath
 import secrets
 import sys
 import time
@@ -23,7 +25,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 
@@ -47,6 +49,10 @@ logger = logging.getLogger("sherlocking.web")
 # browser history, reverse-proxy access logs, or referrer headers.
 _WEB_AUTH_TOKEN = os.getenv("SHERLOCKING_WEB_AUTH_TOKEN", "").strip()
 _MAX_AUTH_FAILURES = 3
+_MAX_UPLOAD_BYTES = int(os.getenv("SHERLOCKING_MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+_UPLOAD_ROOT = "/mnt/sherlocking/user-data/uploads"
+_active_runtimes: dict[str, AppRuntime] = {}
+_active_runtimes_lock = threading.Lock()
 
 
 class _SidFilter(logging.Filter):
@@ -133,6 +139,106 @@ def _make_app() -> FastAPI:
     @app.get("/health")
     async def health():
         return {"status": "ok", "service": "sherlocking-web"}
+
+    def require_http_auth(authorization: str | None) -> None:
+        """Validate the same bearer token used by the WebSocket gateway."""
+        if not _WEB_AUTH_TOKEN:
+            return
+        expected = f"Bearer {_WEB_AUTH_TOKEN}"
+        if authorization is None or not secrets.compare_digest(authorization, expected):
+            raise HTTPException(status_code=401, detail="authentication required")
+
+    def get_runtime_for_thread(thread_id: str) -> AppRuntime:
+        with _active_runtimes_lock:
+            runtime = _active_runtimes.get(thread_id)
+        if runtime is None:
+            raise HTTPException(status_code=404, detail="thread is not connected")
+        return runtime
+
+    def safe_upload_name(filename: str) -> str:
+        """Flatten a client filename and reject traversal/empty names."""
+        normalized = filename.replace("\\", "/")
+        name = posixpath.basename(normalized).strip()
+        if not name or name in {".", ".."} or len(name) > 180:
+            raise HTTPException(status_code=400, detail="invalid filename")
+        return name
+
+    async def get_thread_sandbox(thread_id: str):
+        runtime = get_runtime_for_thread(thread_id)
+        provider = runtime.capability_registry.sandbox_provider
+        if provider is None:
+            raise HTTPException(status_code=409, detail="sandbox is disabled")
+        sandbox_id = await asyncio.to_thread(provider.acquire, thread_id, user_id="web-user")
+        sandbox = provider.get(sandbox_id)
+        if sandbox is None:
+            raise HTTPException(status_code=503, detail="sandbox is unavailable")
+        return sandbox_id, sandbox
+
+    @app.post("/api/upload")
+    async def upload_file(
+        request: Request,
+        filename: str = Query(...),
+        thread_id: str = Header(..., alias="X-Thread-ID"),
+        authorization: str | None = Header(None),
+    ):
+        """Stream one file into the current thread's sandbox uploads directory."""
+        require_http_auth(authorization)
+        safe_name = safe_upload_name(filename)
+        content_length = request.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="file exceeds upload size limit")
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > _MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="file exceeds upload size limit")
+            chunks.append(chunk)
+
+        sandbox_id, sandbox = await get_thread_sandbox(thread_id)
+        virtual_path = f"{_UPLOAD_ROOT}/{safe_name}"
+        await asyncio.to_thread(sandbox.update_file, virtual_path, b"".join(chunks))
+        return {
+            "filename": safe_name,
+            "path": virtual_path,
+            "bytes": total,
+            "sandbox_id": sandbox_id,
+        }
+
+    @app.get("/api/files")
+    async def list_files(
+        thread_id: str = Query(...),
+        authorization: str | None = Header(None),
+    ):
+        """List files uploaded to the current thread's uploads directory."""
+        require_http_auth(authorization)
+        _sandbox_id, sandbox = await get_thread_sandbox(thread_id)
+        entries = await asyncio.to_thread(sandbox.list_dir, _UPLOAD_ROOT, max_depth=1)
+        files = [entry for entry in entries if entry and "/" not in entry and "\\" not in entry]
+        return {"files": files}
+
+    @app.get("/api/files/{filename}")
+    async def download_file(
+        filename: str,
+        thread_id: str = Query(...),
+        authorization: str | None = Header(None),
+    ):
+        """Download one file from the current thread's uploads directory."""
+        require_http_auth(authorization)
+        safe_name = safe_upload_name(filename)
+        _sandbox_id, sandbox = await get_thread_sandbox(thread_id)
+        virtual_path = f"{_UPLOAD_ROOT}/{safe_name}"
+        try:
+            content = await asyncio.to_thread(sandbox.download_file, virtual_path)
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="file not found") from exc
+        media_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        )
 
     # favicon（避免浏览器 404 日志）
     @app.get("/favicon.ico")
@@ -262,6 +368,8 @@ async def websocket_chat(ws: WebSocket):
                 await ws.send_json({"type": "status", "content": "正在初始化 Sherlocking 引擎..."})
                 try:
                     runtime = _init_runtime()
+                    with _active_runtimes_lock:
+                        _active_runtimes[runtime.thread_id] = runtime
                     await ws.send_json({
                         "type": "status",
                         "content": "ready",
@@ -349,6 +457,9 @@ async def websocket_chat(ws: WebSocket):
     finally:
         # 清理资源
         if runtime is not None:
+            with _active_runtimes_lock:
+                if _active_runtimes.get(runtime.thread_id) is runtime:
+                    _active_runtimes.pop(runtime.thread_id, None)
             try:
                 runtime.thread_journal.append("web.session_ended", {})
             except Exception:

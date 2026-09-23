@@ -1208,6 +1208,39 @@ body {
   border-color: rgba(175,190,185,.78);
   box-shadow: 0 8px 22px rgba(35,54,55,.07), inset 0 1px 0 rgba(255,255,255,.7);
 }
+.file-title-row { justify-content: space-between; }
+.file-count {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(14,135,135,.1); color: var(--brass); font: 700 10px var(--font-mono); text-align: center;
+}
+.file-upload-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 10px; border: 1px solid rgba(14,135,135,.28); border-radius: 10px;
+  background: rgba(14,135,135,.08); color: var(--brass-deep); cursor: pointer; font-size: 12px; font-weight: 700;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.file-upload-btn:hover { background: rgba(14,135,135,.15); border-color: var(--brass); transform: translateY(-1px); }
+.welcome-upload {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 7px 12px;
+  border: 1px solid rgba(14,135,135,.24); border-radius: 999px; background: rgba(14,135,135,.06);
+  color: var(--brass-deep); cursor: pointer; font-size: 11.5px; transition: background .15s, border-color .15s;
+}
+.welcome-upload:hover { background: rgba(14,135,135,.13); border-color: var(--brass); }
+.file-upload-icon { font-size: 17px; line-height: 12px; font-weight: 400; }
+.file-drop-zone {
+  margin-top: 8px; padding: 8px; border: 1px dashed rgba(118,145,141,.48); border-radius: 8px;
+  color: var(--ink-3); font-size: 10.5px; line-height: 1.4; text-align: center;
+}
+.file-drop-zone.dragover { color: var(--brass-deep); border-color: var(--brass); background: rgba(14,135,135,.08); }
+.file-list { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; max-height: 150px; overflow-y: auto; }
+.file-empty { color: var(--ink-3); font-size: 11px; }
+.file-item { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; }
+.file-item::before { content: ""; width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--brass); }
+.file-name { flex: 1; min-width: 0; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-download { border: 0; background: none; color: var(--brass-deep); cursor: pointer; font: 700 10px var(--font-mono); padding: 2px; }
+.file-download:hover { text-decoration: underline; }
+.file-progress { height: 3px; margin-top: 6px; overflow: hidden; border-radius: 2px; background: var(--paper-sunken); }
+.file-progress > span { display: block; width: 0; height: 100%; background: var(--brass); transition: width .2s; }
 
 #welcome-view { position: relative; }
 #welcome-view::before {
@@ -1272,6 +1305,122 @@ body {
   .brand-sub, .pill-mode { display: none; }
 }
 
+/* ============================================================
+   Quiet product pass — inspired by ghfind's editorial utility UI.
+   Less dashboard chrome, more readable tool surface.
+   ============================================================ */
+:root {
+  --bg: #f7f8f7;
+  --bg-deep: #f0f2f1;
+  --paper: #ffffff;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f1f3f2;
+  --ink: #111817;
+  --ink-2: #53605e;
+  --ink-3: #8a9693;
+  --line: #e1e6e3;
+  --line-2: #d3dbd7;
+  --brass: #087f73;
+  --brass-deep: #05645b;
+  --brass-soft: #e3f2ee;
+  --moss: #3f7864;
+  --moss-soft: #e8f2ec;
+  --amber: #9a6b32;
+  --brick: #a65353;
+  --shadow-card: 0 1px 2px rgba(15, 29, 27, .04);
+  --shadow-raised: 0 10px 28px rgba(15, 29, 27, .09);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+body {
+  background: var(--bg);
+  background-image: none;
+  color: var(--ink);
+  font-size: 14px;
+}
+#topbar {
+  height: 62px; padding: 0 28px; background: rgba(255,255,255,.96);
+  border-bottom: 1px solid var(--line); box-shadow: none; backdrop-filter: blur(12px);
+}
+.brand { gap: 10px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; background: var(--ink); border: 0; box-shadow: none; font-size: 16px; }
+.brand-name { color: var(--ink); font-family: var(--font); font-size: 15px; letter-spacing: -.01em; }
+.brand-sub { color: var(--ink-3); font-size: 9px; letter-spacing: .16em; }
+.pill-mode { color: var(--brass-deep); border: 0; background: var(--brass-soft); padding: 4px 9px; border-radius: 5px; font: 700 10px var(--font-mono); }
+.conn-state { color: var(--ink-3); font-size: 11px; }
+.conn-state .led { width: 6px; height: 6px; box-shadow: none; }
+.icon-btn { width: 30px; height: 30px; border-radius: 7px; border-color: var(--line); background: transparent; color: var(--ink-2); box-shadow: none; }
+.icon-btn:hover { background: var(--paper-sunken); border-color: var(--line-2); color: var(--ink); }
+#body-row { background: var(--bg); }
+#main-col { background: transparent; }
+#sidebar { width: 278px; padding: 18px 16px; background: #fbfcfb; border-left: 1px solid var(--line); backdrop-filter: none; }
+.side-card { padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); box-shadow: none; }
+.sec-title { font-size: 11px; color: var(--ink-2); letter-spacing: .02em; }
+.sec-title::before { width: 3px; height: 12px; border-radius: 0; }
+.side-hero-num { color: var(--ink); font: 600 24px var(--font); }
+.side-bar { height: 4px; border-radius: 1px; background: #edf0ee; box-shadow: none; }
+.side-bar-inner { border-radius: 1px; background: var(--brass); }
+#welcome-view { align-items: flex-start; text-align: left; justify-content: center; padding: 70px max(32px, calc((100% - 780px) / 2)); }
+#welcome-view::before { top: 28px; left: max(32px, calc((100% - 780px) / 2)); color: var(--ink-3); font-size: 9px; letter-spacing: .14em; }
+.welcome-rule { width: 28px; height: 2px; margin-bottom: 22px; background: var(--brass); box-shadow: none; }
+#welcome-logo { color: var(--ink); font: 650 clamp(38px, 5vw, 62px)/1.03 var(--font); letter-spacing: -.06em; text-shadow: none; margin-bottom: 16px; }
+#welcome-tagline { max-width: 550px; color: var(--ink-2); font-size: 16px; line-height: 1.55; margin-bottom: 22px; }
+#welcome-subtitle { justify-content: flex-start; margin-bottom: 22px; color: var(--ink-3); font-size: 11px; }
+#welcome-subtitle .mode-tag { border: 1px solid var(--line-2); border-radius: 4px; background: var(--paper); color: var(--ink-2); padding: 2px 7px; font-size: 10px; }
+#welcome-input-wrap { max-width: 640px; }
+.welcome-card { border: 1px solid var(--line-2); border-radius: 9px; padding: 6px; box-shadow: 0 2px 7px rgba(15,29,27,.04); }
+.welcome-card:focus-within { border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(8,127,115,.08); }
+#welcome-input { min-height: 52px; font-size: 14px; }
+.welcome-upload { margin-left: 2px; color: var(--ink-2); background: transparent; border-color: var(--line); border-radius: 5px; }
+.welcome-upload:hover { color: var(--ink); background: var(--paper); border-color: var(--line-2); }
+#welcome-tip { margin-top: 9px; color: var(--ink-3); font-size: 11px; }
+.suggestions { justify-content: flex-start; max-width: 660px; gap: 8px; margin-top: 26px; }
+.suggestion-chip { max-width: none; flex: 0 1 auto; min-width: 170px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); box-shadow: none; color: var(--ink-2); }
+.suggestion-chip b { color: var(--brass); font-size: 10px; }
+.suggestion-chip:hover { transform: none; border-color: var(--line-2); background: var(--paper-sunken); box-shadow: none; }
+#conv-view { background: var(--bg); }
+#msg-list { padding: 32px max(28px, calc((100% - 860px) / 2)) 18px; }
+#msg-list::before { display: none; }
+.msg-row { max-width: 860px; margin-bottom: 24px; }
+.msg-row.user, .msg-row.assistant { gap: 11px; }
+.msg-avatar { width: 27px; height: 27px; border-radius: 7px; margin-top: 3px; font-size: 11px; }
+.avatar-user { background: var(--ink); box-shadow: none; }
+.avatar-assistant { background: var(--brass-soft); color: var(--brass-deep); border: 1px solid #c8e3db; box-shadow: none; }
+.msg-who { margin: 0 0 4px 1px; color: var(--ink-3); font-size: 10px; letter-spacing: .08em; }
+.msg-bubble { padding: 12px 14px; border-radius: 6px; }
+.msg-row.assistant .msg-bubble { background: var(--paper); border-color: var(--line); box-shadow: none; }
+.msg-row.user .msg-bubble { background: var(--brass-soft); border-color: #c8e3db; box-shadow: none; }
+.msg-content { color: #263330; font-size: 14px; line-height: 1.7; }
+.msg-content pre { border-radius: 7px; box-shadow: none; }
+.msg-row.tool .msg-content { padding: 8px 11px; border-radius: 5px; box-shadow: none; background: var(--moss-soft); }
+#input-area { padding: 10px max(24px, calc((100% - 860px) / 2)) 10px; background: linear-gradient(180deg, transparent, rgba(247,248,247,.96) 18%); }
+.composer { border-radius: 9px; padding: 5px 6px; border-color: var(--line-2); box-shadow: 0 2px 8px rgba(15,29,27,.06); }
+.composer:focus-within { transform: none; border-color: var(--ink-2); box-shadow: 0 0 0 3px rgba(8,127,115,.08); }
+#conv-input { min-height: 46px; }
+.composer-foot { padding: 3px 4px 1px 10px; }
+#send-btn { width: 32px; height: 32px; border-radius: 6px; background: var(--ink); border: 0; box-shadow: none; }
+#send-btn:hover { background: var(--brass-deep); transform: none; }
+#status-bar { padding: 6px max(25px, calc((100% - 860px) / 2)); background: var(--bg); border-top-color: var(--line); }
+.file-upload-btn { border-radius: 5px; background: transparent; box-shadow: none; }
+.file-upload-btn:hover { transform: none; background: var(--paper-sunken); }
+.file-drop-zone { border-radius: 5px; }
+@media (max-width: 760px) {
+  #welcome-view { padding: 58px 22px 34px; }
+  #welcome-view::before { left: 22px; }
+  #sidebar { display: none; }
+  #topbar { padding: 0 14px; }
+  .brand-sub, .pill-mode { display: none; }
+}
+.composer-tools { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.composer-upload { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--ink-2); cursor: pointer; font-size: 11px; white-space: nowrap; }
+.composer-upload svg { width: 14px; height: 14px; }
+.composer-upload:hover { background: var(--paper-sunken); color: var(--ink); }
+.composer-file-count { min-width: 16px; padding: 1px 4px; border-radius: 999px; background: var(--brass-soft); color: var(--brass-deep); font: 700 10px var(--font-mono); text-align: center; }
+.composer-files { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 270px; overflow: hidden; }
+.composer-files .file-item { min-width: 100px; max-width: 180px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); }
+.composer-files .file-download { display: none; }
+.composer .file-drop-zone { margin: 0 9px; padding: 4px; border: 0; color: var(--ink-3); font-size: 10px; text-align: left; }
+.composer .file-drop-zone.dragover { color: var(--brass-deep); background: var(--brass-soft); }
 </style>
 </head>
 <body>
@@ -1338,11 +1487,20 @@ body {
         <div id="exec-bar"><span class="spinner"></span><span id="exec-text"></span></div>
         <div id="input-area">
           <div class="composer">
+            <input id="file-input" type="file" multiple hidden>
             <textarea id="conv-input"
               placeholder="输入消息…　Enter 发送 · Shift+Enter 换行 · / 开头为命令"
               rows="1"></textarea>
+            <div class="file-drop-zone" id="file-drop-zone">拖入文件到这里，Agent 会在当前线程中读取</div>
             <div class="composer-foot">
-              <span class="composer-hint">/ 调用命令 · Shift+Enter 换行</span>
+              <div class="composer-tools">
+                <button class="composer-upload upload-trigger" id="conv-upload-btn" type="button" title="添加文件">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  <span>添加文件</span><span class="composer-file-count" id="file-count">0</span>
+                </button>
+                <div class="composer-files" id="file-list"><span class="file-empty">尚未添加文件</span></div>
+                <span class="composer-hint">/ 调用命令 · Shift+Enter 换行</span>
+              </div>
               <div class="composer-actions">
                 <button id="stop-btn">停止</button>
                 <button id="send-btn" title="发送 (Enter)" aria-label="发送">
@@ -1496,6 +1654,9 @@ body {
 const STATE = {
   connected: false,
   authenticated: false,
+  threadId: '',
+  pendingFiles: [],
+  sessionRequested: false,
   running: false,
   currentTokens: 0,
   currentFraction: 0.0,
@@ -1546,6 +1707,11 @@ const statusMode = $('#status-mode');
 const welcomeModelName = $('#welcome-model-name');
 const welcomeModeTag = $('#welcome-mode-tag');
 const toast = $('#toast');
+const fileInput = $('#file-input');
+const fileUploadBtn = $('#file-upload-btn');
+const fileDropZone = $('#file-drop-zone');
+const fileList = $('#file-list');
+const fileCount = $('#file-count');
 
 // ---- WebSocket ----
 let ws = null;
@@ -1563,6 +1729,112 @@ function getWsUrl() {
 
 function getAuthToken() {
   return localStorage.getItem('sherlocking_web_auth_token') || '';
+}
+
+function getApiBaseUrl() {
+  try {
+    const endpoint = new URL(getWsUrl());
+    return `${endpoint.protocol === 'wss:' ? 'https:' : 'http:'}//${endpoint.host}`;
+  } catch (_) {
+    return window.location.origin;
+  }
+}
+
+function apiHeaders() {
+  const headers = { 'X-Thread-ID': STATE.threadId };
+  const token = getAuthToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function renderFileList(files) {
+  const names = Array.isArray(files) ? files : [];
+  fileCount.textContent = names.length;
+  if (!names.length) {
+    fileList.innerHTML = '<span class="file-empty">暂无上传文件</span>';
+    return;
+  }
+  fileList.innerHTML = names.map(name => `
+    <div class="file-item">
+      <span class="file-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      <button class="file-download" type="button" data-file="${escapeHtml(name)}">下载</button>
+    </div>`).join('');
+  fileList.querySelectorAll('.file-download').forEach(button => {
+    button.addEventListener('click', () => downloadFile(button.dataset.file));
+  });
+}
+
+async function refreshFiles() {
+  if (!STATE.authenticated || !STATE.threadId) return;
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/files?thread_id=${encodeURIComponent(STATE.threadId)}`, {
+      headers: apiHeaders(),
+    });
+    if (!response.ok) {
+      if (response.status === 409) renderFileList([]);
+      return;
+    }
+    const data = await response.json();
+    renderFileList(data.files || []);
+  } catch (_) {
+    fileList.innerHTML = '<span class="file-empty">文件列表暂不可用</span>';
+  }
+}
+
+async function uploadFiles(files) {
+  if (!STATE.authenticated) {
+    showToast('请先完成连接鉴权');
+    return;
+  }
+  const selected = Array.from(files || []);
+  if (!STATE.threadId) {
+    STATE.pendingFiles.push(...selected);
+    if (!STATE.sessionRequested) {
+      STATE.sessionRequested = true;
+      showToast('正在建立工作线程…');
+      sendMessage('/status');
+    }
+    return;
+  }
+  for (const file of selected) {
+    try {
+      showToast(`正在上传 ${file.name}…`);
+      const response = await fetch(`${getApiBaseUrl()}/api/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || `HTTP ${response.status}`);
+      }
+      showToast(`已上传 ${file.name}`);
+    } catch (error) {
+      showToast(`${file.name} 上传失败`);
+      console.error('[Sherlocking] 文件上传失败:', error);
+    }
+  }
+  fileInput.value = '';
+  await refreshFiles();
+}
+
+async function downloadFile(name) {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/files/${encodeURIComponent(name)}?thread_id=${encodeURIComponent(STATE.threadId)}`, {
+      headers: apiHeaders(),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    showToast('文件下载失败');
+    console.error('[Sherlocking] 文件下载失败:', error);
+  }
 }
 
 function markConnected() {
@@ -1727,6 +1999,8 @@ function handleStatus(msg) {
   } else if (content === 'ready') {
     STATE.model = msg.model || '--';
     STATE.mode = msg.mode || 'expert';
+    STATE.threadId = msg.thread_id || '';
+    STATE.sessionRequested = false;
     welcomeModelName.textContent = STATE.model;
     welcomeModeTag.textContent = STATE.mode;
     statusModel.textContent = STATE.model;
@@ -1734,6 +2008,11 @@ function handleStatus(msg) {
     const topMode = $('#top-mode');
     if (topMode) topMode.textContent = STATE.mode;
     updateSidebar();
+    refreshFiles();
+    if (STATE.pendingFiles.length) {
+      const pending = STATE.pendingFiles.splice(0);
+      uploadFiles(pending);
+    }
     welcomeTip.textContent = '/help 查看命令 · 就绪';
   } else {
     // 其他状态消息
@@ -2237,6 +2516,19 @@ document.querySelectorAll('.suggestion-chip').forEach(chip => {
     }
     handleUserInput(chip.dataset.q || '');
   });
+});
+
+$$('.upload-trigger').forEach(trigger => trigger.addEventListener('click', () => fileInput.click()));
+fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
+fileDropZone.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  fileDropZone.classList.add('dragover');
+});
+fileDropZone.addEventListener('dragleave', () => fileDropZone.classList.remove('dragover'));
+fileDropZone.addEventListener('drop', (event) => {
+  event.preventDefault();
+  fileDropZone.classList.remove('dragover');
+  uploadFiles(event.dataTransfer.files);
 });
 
 // 全局快捷键
