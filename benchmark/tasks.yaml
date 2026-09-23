@@ -1,0 +1,101 @@
+# Sherlocking Agent Benchmark 考题集
+#
+# 每道题包含:
+#   id          — 唯一标识（用于关联 L3 评分）
+#   question    — 给 agent 的研究问题
+#   category    — 题目类别（用于分类统计）
+#   success_criteria — 判断是否成功的条件（由人审核或外挂脚本判断）
+#   keywords    — 期望回答中应出现的关键词（programmatic 检查用）
+#   min_length  — 期望报告最小字数（programmatic 检查用）
+#   timeout     — 单题超时秒数（默认 300）
+#   notes       — 出题意图说明
+
+- id: bm-001
+  question: "研究 2024 年诺贝尔物理学奖获得者及其获奖原因，总结他们的主要贡献"
+  category: "事实查询"
+  success_criteria: "报告中需提及 John Hopfield 和 Geoffrey Hinton，且说明他们在神经网络/机器学习领域的开创性贡献"
+  keywords: ["Hopfield", "Hinton", "神经网络", "机器学习"]
+  min_length: 500
+  timeout: 300
+  notes: "基础事实查询，验证 agent 能否准确检索并组织信息"
+
+- id: bm-002
+  question: "对比分析 Rust 和 Go 在系统编程领域的优劣势，从性能、安全性、生态系统三个维度展开"
+  category: "对比分析"
+  success_criteria: "报告需覆盖三个维度（性能/安全性/生态系统），且对两种语言都有明确结论"
+  keywords: ["Rust", "Go", "性能", "安全", "生态"]
+  min_length: 800
+  timeout: 300
+  notes: "对比分析能力，验证 agent 能否结构化组织多维度信息"
+
+- id: bm-003
+  question: "研究 Transformer 架构中 Self-Attention 机制的数学原理，解释 Q/K/V 矩阵的作用"
+  category: "技术深度"
+  success_criteria: "报告需解释 Query/Key/Value 矩阵，包含 softmax 公式或 scaled dot-product attention 公式"
+  keywords: ["Query", "Key", "Value", "softmax", "attention"]
+  min_length: 600
+  timeout: 300
+  notes: "技术深度题，验证 agent 能否准确解释复杂技术概念"
+
+- id: bm-004
+  question: "调查量子计算在过去五年的主要进展，重点关注 IBM 和 Google 的量子优越性实验"
+  category: "前沿调研"
+  success_criteria: "报告需提及 IBM 和 Google 的量子计算实验，包含具体时间线或里程碑事件"
+  keywords: ["量子", "IBM", "Google", "优越性"]
+  min_length: 700
+  timeout: 300
+  notes: "前沿调研能力，验证 agent 能否检索最新信息并组织时间线"
+
+- id: bm-005
+  question: "分析开源大语言模型（如 LLaMA、Mistral）与闭源模型（如 GPT-4）在性能和可访问性上的差异"
+  category: "对比分析"
+  success_criteria: "报告需对比至少 2 个开源和 1 个闭源模型，覆盖性能和可访问性两个维度"
+  keywords: ["开源", "LLaMA", "Mistral", "GPT", "性能", "可访问"]
+  min_length: 800
+  timeout: 300
+  notes: "综合对比分析，验证 agent 能否处理多实体多维度的比较"
+
+- id: bm-006
+  question: "研究 CRISPR 基因编辑技术的最新临床应用进展，特别是针对镰状细胞贫血症的治疗"
+  category: "前沿调研"
+  success_criteria: "报告需提及 CRISPR 和镰状细胞贫血症，包含 Casgevy 或类似已批准疗法的信息"
+  keywords: ["CRISPR", "镰状细胞", "基因编辑", "临床"]
+  min_length: 600
+  timeout: 300
+  notes: "跨学科前沿调研，验证 agent 能否检索特定领域的最新进展"
+
+- id: bm-007
+  question: "解释 Raft 共识算法的核心流程，包括 Leader 选举、日志复制和安全性保证"
+  category: "技术深度"
+  success_criteria: "报告需覆盖 Leader 选举、日志复制、安全性三个核心机制"
+  keywords: ["Raft", "Leader", "日志复制", "共识", "选举"]
+  min_length: 700
+  timeout: 300
+  notes: "分布式系统知识深度，验证 agent 能否准确解释算法流程"
+
+- id: bm-008
+  question: "调查 2024 年全球 AI 监管政策的主要变化，对比欧盟 AI Act 和美国的相关政策"
+  category: "政策调研"
+  success_criteria: "报告需提及欧盟 AI Act 和美国的 AI 政策，包含具体条款或时间节点"
+  keywords: ["AI", "监管", "欧盟", "美国", "政策"]
+  min_length: 700
+  timeout: 300
+  notes: "政策类调研，验证 agent 能否处理非技术类信息的检索和对比"
+
+- id: bm-009
+  question: "分析微服务架构中 Service Mesh（如 Istio/Linkerd）的价值和代价，以及在什么规模下值得引入"
+  category: "架构分析"
+  success_criteria: "报告需解释 Service Mesh 的核心功能，并讨论适用场景和代价"
+  keywords: ["Service Mesh", "Istio", "Linkerd", "微服务", "sidecar"]
+  min_length: 800
+  timeout: 300
+  notes: "架构权衡分析，验证 agent 能否从正反两面分析技术选型"
+
+- id: bm-010
+  question: "研究极端气候事件（如热浪、洪水）与全球变暖之间的科学关联，总结 IPCC 最新报告的关键结论"
+  category: "科学调研"
+  success_criteria: "报告需提及 IPCC 报告，并讨论极端气候事件与全球变暖的因果关系"
+  keywords: ["气候", "IPCC", "极端", "热浪", "洪水", "变暖"]
+  min_length: 700
+  timeout: 300
+  notes: "科学文献调研，验证 agent 能否准确引用科学共识"

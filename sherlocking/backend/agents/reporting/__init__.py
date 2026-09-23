@@ -1,0 +1,8 @@
+"""Reporting package."""
+
+from sherlocking.backend.agents.reporting.thread_report import (
+    ReportArtifact,
+    generate_report_from_thread,
+)
+
+__all__ = ["ReportArtifact", "generate_report_from_thread"]

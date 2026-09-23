@@ -1,0 +1,45 @@
+# Sherlocking docker-compose — 一键启动深度研究 Agent
+#
+# 用法:
+#   docker compose run --rm sherlocking              # TUI 交互（首次会启动配置向导）
+#   docker compose run --rm sherlocking cli          # 传统 CLI 滚动模式
+#   docker compose run --rm sherlocking run "问题"   # 单次研究
+#
+# 配置:
+#   1. 首次运行容器内会触发配置向导（生成 /app/.env）
+#   2. 或在宿主机项目根创建 .env，通过 env_file 注入
+#
+# 数据持久化:
+#   .sherlocking/ → /app/.sherlocking（DB、日志、artifact、memory、MCP 配置）
+#   skills/  → /app/skills（用户上传 skill）
+#
+# Sandbox:
+#   容器内默认 Local sandbox（SHERLOCKING_SANDBOX_EXECUTOR=local）。
+#   如需 Docker 隔离 sandbox，取消下方 docker.sock 挂载注释 + 改 .env:
+#     SHERLOCKING_SANDBOX_USE=sherlocking.backend.agents.sandbox.docker.docker_sandbox_provider:DockerSandboxProvider
+#     SHERLOCKING_SANDBOX_EXECUTOR=local
+
+services:
+  sherlocking:
+    build: .
+    image: sherlocking:latest
+    container_name: sherlocking
+    stdin_open: true      # 交互式输入
+    tty: true             # 终端色彩 + TUI 全屏
+    env_file:
+      - path: .env        # 宿主机 .env（不存在则忽略）
+        required: false
+    environment:
+      # 容器内默认开启 memory + multiagent（可被 .env 覆盖）
+      - SHERLOCKING_MEMORY_USE=default
+      - SHERLOCKING_MEMORY_PHASE2_ENABLED=true
+      - SHERLOCKING_MULTIAGENT_ENABLED=true
+    volumes:
+      - ./.sherlocking:/app/.sherlocking   # 运行时数据持久化（DB/logs/memory/artifacts）
+      - ./skills:/app/skills     # 用户 skill 持久化
+      - ./.env:/app/.env         # .env 持久化（Ctrl+B 面板可写回）
+      # Docker sandbox 模式：挂载宿主机 docker.sock（Linux/Mac）
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # 默认无 command，走 ENTRYPOINT 的 sherlocking（TUI 模式）
+    # 覆盖示例: docker compose run --rm sherlocking cli
+    #           docker compose run --rm sherlocking run "研究问题"

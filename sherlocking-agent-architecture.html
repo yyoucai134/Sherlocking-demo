@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sherlocking Agent 架构解析 —— 它是怎么搭建这个 Agent 的</title>
+<style>
+  :root {
+    /* —— 莫兰迪三色（低饱和、带灰雾感，全页只此三彩）——
+       雾霾蓝 #7E96A8 · 豆沙绿 #9AA88B · 灰玫瑰 #C2A5A0 —— */
+    --c-blue:  #7E96A8;
+    --c-green: #9AA88B;
+    --c-rose:  #C2A5A0;
+
+    /* 中性暖白 / 米灰（不算彩色） */
+    --bg:       #F5F1E8;
+    --bg-soft:  #EDE7DA;
+    --card:     #FCFAF5;
+    --card-2:   #F1EBDF;
+    --border:   #DED6C5;
+    --text:     #4C4940;
+    --muted:    #8E8779;
+    --code-bg:  #F0EADF;
+
+    /* 语义别名：全部映射到上面三色 */
+    --accent:   var(--c-blue);
+    --accent-2: var(--c-green);
+    --accent-3: var(--c-rose);
+    --accent-4: var(--c-blue);
+    --accent-5: var(--c-rose);
+
+    --radius: 12px;
+    --sidebar-w: 300px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- Layout ---------- */
+  .layout { display: flex; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--bg-soft);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 14px 40px;
+    z-index: 20;
+  }
+  .sidebar h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    margin: 18px 10px 8px;
+  }
+  .sidebar .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 18px; color: var(--text);
+    margin-bottom: 4px;
+  }
+  .sidebar .brand .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+  .sidebar nav a {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13.5px;
+    border-left: 2px solid transparent;
+  }
+  .sidebar nav a:hover { background: var(--card); color: var(--text); text-decoration: none; }
+  .sidebar nav a.active {
+    color: var(--text);
+    background: var(--card);
+    border-left-color: var(--accent);
+  }
+
+  .content {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    min-width: 0;
+    padding: 0 48px 120px;
+    max-width: 1060px;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    padding: 64px 0 28px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .hero .kicker {
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .hero h1 {
+    font-size: 40px;
+    margin: 10px 0 14px;
+    line-height: 1.2;
+    background: linear-gradient(120deg, #55697C, #7A8560);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero .sub {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 720px;
+  }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .badge {
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+  }
+  .badge b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 56px; scroll-margin-top: 20px; }
+  .sec-id {
+    font-size: 12px; font-weight: 700; letter-spacing: .16em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  h2.sec-title {
+    font-size: 26px;
+    margin: 6px 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 {
+    font-size: 18px;
+    margin: 28px 0 8px;
+    color: #4F6476;
+  }
+  h4 { font-size: 15px; margin: 20px 0 6px; color: #5A564C; }
+  p { margin: 10px 0; color: #5A564C; }
+  strong { color: #3E3B33; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin: 14px 0;
+  }
+  .card h4 { margin-top: 0; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .note {
+    border-left: 3px solid var(--accent-3);
+    background: rgba(194,165,160,.20);
+    padding: 10px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 14px 0;
+    color: #6B4F4A;
+  }
+  .note.blue { border-left-color: var(--accent-4); background: rgba(126,150,168,.18); color: #435769; }
+  .note.green { border-left-color: var(--accent-2); background: rgba(154,168,139,.22); color: #4E5A41; }
+
+  /* ---------- Code ---------- */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 12.8px;
+    line-height: 1.55;
+    color: #4C4940;
+  }
+  code {
+    font-family: "Cascadia Code", Consolas, monospace;
+    background: var(--card-2);
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-size: .9em;
+    color: #52697D;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  .tok-k { color: #5C7C96; }
+  .tok-s { color: #7C8F68; }
+  .tok-c { color: #A29B8B; font-style: italic; }
+  .tok-f { color: #B0837C; }
+
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    color: #6E6A5F;
+    font-weight: 600;
+    background: var(--card);
+    position: sticky;
+  }
+  tr:hover td { background: rgba(126,150,168,.08); }
+  td code { font-size: 12px; }
+
+  /* ---------- Diagram ---------- */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 22px 0;
+  }
+  .flow-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .node {
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .node .t { font-weight: 700; }
+  .node .d { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .node.core { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .node.mw { border-color: var(--accent-4); }
+  .node.gov { border-color: var(--accent-2); }
+  .arrow {
+    color: var(--muted);
+    font-size: 20px;
+    padding: 4px 0;
+  }
+  .flow-vertical-arrow { writing-mode: vertical-rl; text-orientation: mixed; color: var(--muted); }
+
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 14px 0;
+  }
+  .pipe {
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    color: #5A564C;
+  }
+  .pipe.hl { border-color: var(--accent); color: #3E3B33; }
+  .pipe.gov { border-color: var(--accent-2); }
+  .pipe.mem { border-color: var(--accent-3); }
+  .pipe.ma { border-color: var(--accent-5); }
+
+  .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+  .tag.a { background: rgba(126,150,168,.25); color: #49617A; }
+  .tag.b { background: rgba(154,168,139,.28); color: #56624A; }
+  .tag.c { background: rgba(194,165,160,.25); color: #7A5A54; }
+  .tag.d { background: rgba(126,150,168,.25); color: #49617A; }
+  .tag.e { background: rgba(194,165,160,.25); color: #7A5A54; }
+
+  ul.tight { margin: 8px 0; padding-left: 22px; }
+  ul.tight li { margin: 4px 0; color: #5A564C; }
+
+  .footer {
+    border-top: 1px solid var(--border);
+    margin-top: 60px;
+    padding-top: 20px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  @media (max-width: 860px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; padding: 0 20px 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ============ Sidebar ============ -->
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> Sherlocking 架构解析</div>
+    <nav id="toc">
+      <h2>导航</h2>
+      <a href="#overview">0 · 一句话总览</a>
+      <a href="#stack">1 · 技术栈</a>
+      <a href="#philosophy">2 · 设计哲学</a>
+      <a href="#bootstrap">3 · 启动装配流程</a>
+      <a href="#react">4 · ReAct 内核</a>
+      <a href="#middleware">5 · 中间件系统</a>
+      <a href="#state">6 · 状态管理</a>
+      <a href="#governance">7 · 上下文治理</a>
+      <a href="#memory">8 · 五层记忆</a>
+      <a href="#tools">9 · 工具生态</a>
+      <a href="#sandbox">10 · 沙箱隔离</a>
+      <a href="#multiagent">11 · 多智能体</a>
+      <a href="#skill">12 · 技能系统</a>
+      <a href="#model">13 · 模型路由</a>
+      <a href="#observability">14 · 可观测性</a>
+      <a href="#files">15 · 代码路径索引</a>
+    </nav>
+  </aside>
+
+  <!-- ============ Content ============ -->
+  <main class="content">
+
+    <div class="hero">
+      <div class="kicker">Deep Research Agent Kernel</div>
+      <h1>Sherlocking 是怎么搭建这个 Agent 的</h1>
+      <div class="sub">
+        这是一份对 <code>sherlocking</code> 项目代码的架构拆解：它如何用 <strong>LangChain / LangGraph</strong>
+        把一个「深度研究 Agent」拆成可插拔、可独立测试的层次——薄壳 Leader + 编译图 + 中间件横切 + 分层记忆 + 多智能体 + 沙箱隔离。
+      </div>
+      <div class="badges">
+        <span class="badge"><b>Python</b> 3.12+</span>
+        <span class="badge"><b>LangChain</b> 1.x</span>
+        <span class="badge"><b>LangGraph</b> 1.x</span>
+        <span class="badge"><b>DeepSeek</b> / OpenAI / Anthropic / Gemini / Ollama</span>
+        <span class="badge"><b>Textual</b> TUI</span>
+        <span class="badge"><b>SQLite</b> 技能库</span>
+        <span class="badge"><b>Docker</b> 沙箱</span>
+      </div>
+    </div>
+
+    <!-- 0 -->
+    <section id="overview">
+      <span class="sec-id">Overview</span>
+      <h2 class="sec-title">一句话总览</h2>
+      <p>
+        Sherlocking 的核心是<strong>一个编译好的 LangGraph 智能体图</strong>（<code>create_agent</code> 生成），
+        外层包一个几乎不做事的 <code>LeaderAgent</code> 薄壳。真正的研究智能（多轮决策、工具调用、退出逻辑）
+        全部藏在图内部，通过 <strong>20+ 个中间件（AgentMiddleware）</strong>横切到每个生命周期钩子上。
+      </p>
+      <div class="flow">
+        <div class="flow-row">
+          <div class="node gov"><div class="t">用户输入</div><div class="d">question</div></div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="flow-row">
+          <div class="node core"><div class="t">bootstrap_runtime</div><div class="d">装配：配置/模型/工具/记忆/沙箱/技能/多智能体</div></div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="flow-row">
+          <div class="node core"><div class="t">LeaderAgent.run()</div><div class="d">薄壳：组装 config → graph.ainvoke()</div></div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="flow-row">
+          <div class="node mw"><div class="t">LangGraph 图（ReAct 循环）</div><div class="d">model ⇄ tool 节点循环，被 20+ 中间件包裹</div></div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="flow-row">
+          <div class="node gov"><div class="t">final_report / 最后一条 AIMessage</div><div class="d">expert 自动报告 · default 手动 /report</div></div>
+        </div>
+      </div>
+      <div class="note blue">
+        一句话总结设计思路：<strong>「app → agents」单向依赖</strong>，中间件是一等公民——
+        记忆召回、技能注入、沙箱生命周期、巩固、工具配对、求助、上下文治理，全都是可插拔的横切关注点，
+        而不是硬编码进 agent 循环里。
+      </div>
+    </section>
+
+    <!-- 1 -->
+    <section id="stack">
+      <span class="sec-id">Stack</span>
+      <h2 class="sec-title">技术栈</h2>
+      <div class="grid3">
+        <div class="card"><h4>🖧 编排框架</h4><p>LangChain <code>create_agent</code> + LangGraph <code>checkpointer</code> / <code>Command</code> / <code>Runtime</code>。</p></div>
+        <div class="card"><h4>🧠 模型接入</h4><p><code>langchain-deepseek</code> / <code>langchain-openai</code> / <code>langchain-anthropic</code> / <code>langchain-google-genai</code> / <code>langchain-ollama</code>。</p></div>
+        <div class="card"><h4>🖥 界面</h4><p>默认 <strong>Textual</strong> 全屏 TUI，另有 <code>prompt_toolkit + rich</code> 滚动 CLI，<code>ddgs</code> 内置搜索。</p></div>
+        <div class="card"><h4>📦 存储</h4><p>技能用 <strong>SQLite</strong>，记忆用 <strong>Markdown 文件</strong>（单文件真相源），配置用 <strong>PyYAML</strong>。</p></div>
+        <div class="card"><h4>🐳 隔离</h4><p>沙箱双 provider：<strong>Local</strong>（宿主进程，开发用）/ <strong>Docker</strong>（容器隔离，生产用）。</p></div>
+        <div class="card"><h4>🧪 质量</h4><p>2400+ 测试守护每一层，依赖 <code>pytest</code>。</p></div>
+      </div>
+      <pre><code><span class="tok-c"># pyproject.toml（节选）</span>
+[project.scripts]
+<span class="tok-f">sherlocking</span> = <span class="tok-s">"sherlocking.backend.app.cli.main:main"</span>
+
+dependencies = [
+    <span class="tok-s">"langchain&gt;=1.2.3"</span>, <span class="tok-s">"langchain-deepseek&gt;=1.0.1"</span>,
+    <span class="tok-s">"langchain-openai&gt;=1.1.7"</span>, <span class="tok-s">"langchain-mcp-adapters&gt;=0.1.0"</span>,
+    <span class="tok-s">"textual&gt;=0.40.0"</span>, <span class="tok-s">"ddgs&gt;=9.0.0"</span>, <span class="tok-s">"pyyaml&gt;=6.0"</span>, ...
+]</code></pre>
+    </section>
+
+    <!-- 2 -->
+    <section id="philosophy">
+      <span class="sec-id">Philosophy</span>
+      <h2 class="sec-title">设计哲学：中间件优先，模块解耦</h2>
+      <p>Sherlocking 不是「堆功能清单」，而是建立一套<strong>干净、解耦、可评测</strong>的地基。四条主线贯穿始终：</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>1. 中间件是一等公民</h4>
+          <p>记忆、技能、沙箱、工具路由、上下文治理……全部是<strong>可插拔的横切中间件</strong>，通过 <code>before/after_agent</code>、<code>before/after_model</code>、<code>wrap_tool_call</code> 钩子切入，而不是写死在循环里。关掉某个功能 = 不挂对应中间件。</p>
+        </div>
+        <div class="card">
+          <h4>2. 严格单向依赖</h4>
+          <p><code>app → agents</code> 依赖方向固定。App 层只做装配（bootstrap），不掺和智能逻辑；<code>agents</code> 层各模块彼此独立、独立测试。</p>
+        </div>
+        <div class="card">
+          <h4>3. 「工具里无 LLM」</h4>
+          <p>记忆的原子操作（编码/检索/关联/巩固）是<strong>纯数据操作</strong>；LLM 编排放在中间件/worker 层。技能是「提示级注入」，不是可执行函数。</p>
+        </div>
+        <div class="card">
+          <h4>4. 真实值优先于静态配置</h4>
+          <p>上下文窗口大小穿透 <code>FallbackChatModel</code> 拿到<strong>真实 provider 的 context window</strong>，而不是硬编码阈值；模型名也取路由链实际 provider 名。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="bootstrap">
+      <span class="sec-id">Bootstrap</span>
+      <h2 class="sec-title">启动装配流程（bootstrap_runtime）</h2>
+      <p>入口 <code>sherlocking.backend.app.cli.main:main</code> 启动后，<code>bootstrap_runtime()</code> 按固定顺序把整个 agent 拼装出来。这是理解「它是怎么搭起来」的主线。</p>
+      <div class="pipeline">
+        <span class="pipe">load_config</span>
+        <span class="pipe">建 thread 目录 + RunJournal</span>
+        <span class="pipe hl">ModelRouter 建模型</span>
+        <span class="pipe">内置工具 ddg/read_snapshot</span>
+        <span class="pipe gov">MCP 工具加载</span>
+        <span class="pipe">沙箱 provider + 工具</span>
+        <span class="pipe mem">技能系统 + 进化 + 评测</span>
+        <span class="pipe ma">多智能体 setup</span>
+        <span class="pipe mem">记忆 provider + worker</span>
+        <span class="pipe hl">CapabilityRegistry</span>
+        <span class="pipe hl">make_lead_agent → create_agent</span>
+      </div>
+      <h3>每一步在做什么</h3>
+      <table>
+        <tr><th>步骤</th><th>关键代码</th><th>说明</th></tr>
+        <tr><td>1. 配置</td><td><code>load_config(expert_mode, cli_overrides)</code></td><td>读 <code>.env</code> + YAML profile（general/fast/expert），产出不可变 <code>AppConfig</code>。</td></tr>
+        <tr><td>2. 日志骨架</td><td><code>RunJournal(events_path=thread-events.jsonl)</code></td><td>每个 thread 一个目录，结构化事件流（JSONL）贯穿全程。</td></tr>
+        <tr><td>3. 模型</td><td><code>ModelRouter().build_model("researcher"|"reporter")</code></td><td>按角色路由链构造 <code>FallbackChatModel</code>，DeepSeek 兜底；<code>--provider</code> 则单 provider。</td></tr>
+        <tr><td>4. 内置工具</td><td><code>get_available_tools(groups=["core"])</code></td><td><code>ddg_search</code>、<code>read_snapshot</code> 始终注册——MCP 关闭时的唯一搜索来源。</td></tr>
+        <tr><td>5. MCP</td><td><code>build_mcp_manager()</code> → 审计中间件</td><td>仅当 <code>npx</code> 可用；core 工具启动加载，deferred 按需加载，工具元数据喂给外化层阈值。</td></tr>
+        <tr><td>6. 沙箱</td><td><code>_load_sandbox_provider</code>（反射加载）+ <code>make_sandbox_tools</code></td><td>配置指定 provider 就加载，产出 8 类沙箱工具 + <code>ArtifactServer</code>。</td></tr>
+        <tr><td>7. 技能</td><td><code>build_skill_manager()</code> → 注入/指标中间件</td><td>启用则加载 36 个内置技能 + 自进化（EvolutionManager）+ 评测（EvalLayer）。</td></tr>
+        <tr><td>8. 多智能体</td><td><code>setup_multiagent(agent_factory=_subagent_factory)</code></td><td>注入闭包工厂，构建 leaf-role 子 agent（不能再 spawn）。</td></tr>
+        <tr><td>9. 记忆</td><td><code>set_memory_config</code> + <code>start_memory_worker</code></td><td>同步全局单例配置，启动后台 daemon 线程做 L5 抽取/巩固。</td></tr>
+        <tr><td>10. 注册表</td><td><code>CapabilityRegistry(models, tools, ...)</code></td><td>统一存放 researcher/reporter 模型、工具、reporter、artifact_store、沙箱、技能、专家、记忆。</td></tr>
+        <tr><td>11. 编译图</td><td><code>make_lead_agent(...)</code></td><td>把模型 + 工具 + 中间件列表 + system prompt + checkpointer 喂给 <code>create_agent</code>。</td></tr>
+      </table>
+      <div class="note">
+        <code>CapabilityRegistry</code> 是装配的「容器」——它要求 <strong>直接存实例</strong>（BaseChatModel / BaseTool），
+        而不是存字符串名。各层通过 <code>get_model() / get_tool() / get_skill_store()</code> 等方法取用，缺失抛 <code>CapabilityMissingError</code>。
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section id="react">
+      <span class="sec-id">ReAct Kernel</span>
+      <h2 class="sec-title">ReAct 内核：薄壳 + 编译图</h2>
+      <h3>LeaderAgent 是「薄壳」</h3>
+      <p>
+        <code>LeaderAgent</code> 只是个 dataclass，持有 <code>graph</code> 和 <code>capability_registry</code>。
+        它的 <code>run()</code> 只做四件事：构造初始状态、拼 <code>configurable</code>、调 <code>graph.ainvoke()</code>、按模式取报告。
+      </p>
+      <pre><code><span class="tok-k">@dataclass</span>
+<span class="tok-k">class</span> <span class="tok-f">LeaderAgent</span>:
+    <span class="tok-s">"""Thin shell: invokes compiled graph + collects report."""</span>
+    graph: Any
+    capability_registry: CapabilityRegistry
+
+    <span class="tok-k">def</span> <span class="tok-f">run</span>(self, question, run_context):
+        initial = create_initial_thread_state(question)
+        config = {
+            <span class="tok-s">"configurable"</span>: { <span class="tok-s">"thread_id"</span>: ..., <span class="tok-s">"journal"</span>: ...,
+                            <span class="tok-s">"model"</span>: _resolve_actual_model_name(...) },
+            <span class="tok-s">"recursion_limit"</span>: max_loop_steps * graph_node_multiplier,
+        }
+        final_state = asyncio.run(self.graph.ainvoke(
+            {<span class="tok-s">"messages"</span>: [HumanMessage(content=question)]}, config=config))
+        <span class="tok-c"># expert 模式取 final_report；default 模式取最后一条 AIMessage</span></code></pre>
+      <div class="note blue">
+        ReAct 的「多轮决策 / 工具调用 / 退出逻辑」全部在图内部，靠 <code>create_agent</code> + 中间件完成。
+        <code>recursion_limit</code> 从配置推导（<code>max_loop_steps × graph_node_multiplier</code>），
+        不再硬编码——长任务有足够图节点预算，安全网是 <code>StallDetectionMiddleware</code>。
+      </div>
+      <div class="note">
+        <strong>常见误解澄清：LangGraph 到底用没用？</strong>
+        全项目代码里<strong>没有任何手写 <code>StateGraph</code> / <code>add_node</code> / <code>add_edge</code></strong>——
+        图是 LangChain 1.x 的高层 API <code>create_agent(model, tools, middleware, ...)</code> 生成的。
+        但「没有手写」不等于「没用 LangGraph」：<code>create_agent</code> 返回的对象本身就是
+        <strong>LangGraph 编译图</strong>（测试里直接断言 <code>graph.__class__.__name__ == "CompiledStateGraph"</code>），
+        而且中间件体系与 LangGraph 原生类型深度绑定——钩子签名里的 <code>Runtime</code>、
+        返回的 <code>Command</code>、<code>@hook_config(can_jump_to=["model"])</code> 跳节点、
+        <code>InMemorySaver</code> checkpointer、<code>get_stream_writer()</code> 流事件、
+        <code>graph.ainvoke / astream</code>，全部是 LangGraph 的 API（共 53 处 import）。
+        准确说法是：<strong>LangGraph 是执行引擎，<code>create_agent</code> 只是把 model ⇄ tools 的
+        ReAct 骨架封装成图；Sherlocking 把几乎所有业务逻辑写在中间件层，而中间件通过 LangGraph 的
+        Command / Runtime 机制横切这张图。</strong>
+      </div>
+      <h3>make_lead_agent —— 图的装配工厂</h3>
+      <p>工厂函数把「模型 + 工具 + 中间件 + system prompt + 状态 schema + 检查点」一次性喂给 LangChain 的 <code>create_agent</code>：</p>
+      <pre><code><span class="tok-k">return</span> LeaderAgent(
+    graph=create_agent(
+        model=model,                      <span class="tok-c"># registry.get_model("researcher")</span>
+        tools=tools <span class="tok-k">or</span> <span class="tok-k">None</span>,            <span class="tok-c"># core 或 core+deferred（expert）</span>
+        middleware=_build_middlewares(...), <span class="tok-c"># 20+ 中间件列表</span>
+        system_prompt=apply_prompt_template(...),
+        state_schema=ThreadState,          <span class="tok-c"># 扩展 AgentState 的状态 schema</span>
+        checkpointer=get_checkpointer(),    <span class="tok-c"># 单例，thread 跨轮/跨模式保留 state</span>
+    ),
+    capability_registry=registry,
+)</code></pre>
+      <p>两个模式由 <code>expert_mode</code> 参数化区分：</p>
+      <table>
+        <tr><th>维度</th><th>default（轻量）</th><th>expert（深度研究）</th></tr>
+        <tr><td>工具组</td><td>仅 core</td><td>core + deferred</td></tr>
+        <tr><td>Todo 中间件</td><td>不强制完成</td><td>强制完成</td></tr>
+        <tr><td>Reflection</td><td><code>LightReflectionStrategy</code>（不 jump）</td><td><code>SufficiencyStrategy</code>（充分性 jump）</td></tr>
+        <tr><td>报告</td><td>不自动合成，靠 <code>/report</code></td><td><code>ReportMiddleware</code> after_agent 自动合成</td></tr>
+      </table>
+    </section>
+
+    <!-- 5 -->
+    <section id="middleware">
+      <span class="sec-id">Middleware</span>
+      <h2 class="sec-title">中间件系统（核心）</h2>
+      <p>
+        这是整个项目最关键的抽象。每个中间件继承 LangChain 的 <code>AgentMiddleware</code>，
+        重写需要的生命周期钩子；返回 <code>Command</code> 可写状态 / 注入消息 / 跳转节点。
+        钩子共有三组：
+      </p>
+      <div class="grid3">
+        <div class="card"><h4>before / after_agent</h4><p>一次 run 的开头与结尾。沙箱在 after_agent 释放、预算在 before_agent 初始化。</p></div>
+        <div class="card"><h4>before / after_model</h4><p>每次调 LLM 前后。记忆召回注入、技能注入、失败摘要、上下文治理全在这里。</p></div>
+        <div class="card"><h4>wrap_model_call / wrap_tool_call</h4><p>包裹模型调用与工具调用。工具账本、沙箱 acquire、多智能体打点在这里。</p></div>
+      </div>
+      <div class="note">
+        关键机制：<code>@hook_config(can_jump_to=["model"])</code> 允许中间件把流程<strong>跳回 model 节点</strong>；
+        返回 <code>Command(update={...})</code> 可持久化写状态。这让「反思后重试」「预算耗尽强制收尾」成为可能。
+      </div>
+
+      <h3>中间件挂载顺序（_build_middlewares）</h3>
+      <p>顺序至关重要——它是「洋葱模型」的层次：</p>
+      <div class="pipeline">
+        <span class="pipe gov">TaggedContext</span>
+        <span class="pipe gov">MessageNormalizer</span>
+        <span class="pipe gov">StrategyMiddleware(治理)</span>
+        <span class="pipe">SystemContext</span>
+        <span class="pipe">SkillInjection</span>
+        <span class="pipe">SkillMetrics</span>
+        <span class="pipe">SkillActivation</span>
+        <span class="pipe">Title</span>
+        <span class="pipe">RunJournal</span>
+        <span class="pipe gov">McpAudit</span>
+        <span class="pipe">Sandbox</span>
+        <span class="pipe mem">Memory(L4)</span>
+        <span class="pipe mem">MemoryConsolidation(L5)</span>
+        <span class="pipe">HelpRequest</span>
+        <span class="pipe">DanglingToolCall</span>
+        <span class="pipe">ToolCall</span>
+        <span class="pipe ma">Orchestration</span>
+        <span class="pipe">Evidence</span>
+        <span class="pipe">StallDetection</span>
+        <span class="pipe">Todo</span>
+        <span class="pipe">Reflection</span>
+        <span class="pipe">Report</span>
+      </div>
+
+      <h3>几个代表性中间件的职责</h3>
+      <table>
+        <tr><th>中间件</th><th>钩子</th><th>职责</th></tr>
+        <tr><td><code>ToolCallMiddleware</code></td><td>wrap_tool_call / before_model</td><td>工具调用账本：成败都记 <code>errors</code>，按异常类型分类，per-tool 连续失败重试预算，硬预算兜底；失败摘要延迟到 before_model 注入（避免破坏工具配对）。</td></tr>
+        <tr><td><code>SandboxMiddleware</code></td><td>abefore_model / awrap_tool_call</td><td>沙箱懒获取：首次调沙箱工具才 <code>acquire</code>；<code>abefore_model</code> 从 <code>state["sandbox"]</code> 恢复 ContextVar，子 agent 复用父沙箱；<code>present_files</code> 后登记产物。</td></tr>
+        <tr><td><code>MemoryMiddleware</code></td><td>abefore_model</td><td>记忆召回：每调用注入一条 <code>HumanMessage(hide_from_ui=True)</code>（保护 prompt cache），<code>set_turn_id</code> 上下文变量标记轮次。</td></tr>
+        <tr><td><code>StrategyMiddleware</code></td><td>全部 6 钩子</td><td>上下文治理适配器：把治理策略 bundle 的 6 hook 路由到 AgentMiddleware 钩子。</td></tr>
+        <tr><td><code>OrchestrationMiddleware</code></td><td>wrap_tool_call</td><td>拦截 <code>delegate_to_*</code>，打四计数器 + 写编排状态，失败转 error ToolMessage。</td></tr>
+        <tr><td><code>ReflectionMiddleware</code></td><td>after_model</td><td>反思循环：expert 用充分性策略（不足则 jump 回 model 继续），default 用轻量策略。</td></tr>
+      </table>
+      <div class="note blue">
+        一个体现「工具无 LLM、编排在中间件」的细节：<code>MemoryWorker</code> 在<strong>中间件层</strong>调 LLM 抽取记忆，
+        而 <code>DefaultMemoryManager</code> 只接受外部传入的 content 做纯数据操作——职责边界非常清晰。
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section id="state">
+      <span class="sec-id">State</span>
+      <h2 class="sec-title">状态管理：ThreadState + Reducer</h2>
+      <p>
+        <code>ThreadState</code> 继承 LangChain 的 <code>AgentState</code>（已含 <code>messages</code> 的 <code>add_messages</code> reducer），
+        再扩展出研究过程所需的全部字段。每个字段带 <code>Annotated</code> reducer 驱动图内状态合并：
+      </p>
+      <pre><code><span class="tok-k">class</span> <span class="tok-f">ThreadState</span>(AgentState):
+    user_input: NotRequired[str]
+    intent: NotRequired[Any]
+    research_question: NotRequired[str]
+    observations: Annotated[list, merge_observations]
+    sources:      Annotated[list, merge_sources]
+    citations:    Annotated[list, merge_citations]
+    artifacts:    Annotated[list, merge_artifacts]
+    final_report: Annotated[str | None, merge_final_report]
+    errors:       Annotated[list, merge_errors]      <span class="tok-c"># 也是工具调用账本</span>
+    todos:        Annotated[list | None, merge_todos]
+    governance:   Annotated[GovernanceState | None, merge_governance]
+    sandbox:      Annotated[dict | None, merge_sandbox]
+    orchestration: Annotated[OrchestrationState | None, merge_orchestration]
+    recalled_memories: Annotated[list | None, merge_memory_recalled]
+    ...</code></pre>
+      <div class="note">
+        <strong>checkpointer 是跨轮记忆的关键</strong>：<code>get_checkpointer()</code> 返回单例，
+        同一个 <code>thread_id</code> 的多轮对话、甚至 <code>/expert</code>、<code>/model</code>、<code>/mcp reload</code>
+        热切换重建 agent 后，历史 state 仍然连续（checkpointer 状态跨重建保留）。
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section id="governance">
+      <span class="sec-id">Context Governance</span>
+      <h2 class="sec-title">上下文治理：把 token 预算当一等公民</h2>
+      <p>
+        长研究会话会撞上下文窗口。治理层通过一个「策略 bundle」动态外化 / 压缩历史消息。
+        核心是 <code>GovernanceStrategy</code> 协议（6 个 hook），<code>StrategyMiddleware</code> 把 bundle 接到中间件系统上。
+      </p>
+      <h3>契约：GovernanceContext → GovernanceResult</h3>
+      <pre><code><span class="tok-k">@dataclass(frozen=True)</span>
+<span class="tok-k">class</span> <span class="tok-f">GovernanceResult</span>:
+    state_patch: dict | None = <span class="tok-k">None</span>      <span class="tok-c"># 写 ThreadState（持久）</span>
+    request_override: Any | None = <span class="tok-k">None</span>  <span class="tok-c"># 替换请求（request 级，不持久）</span>
+    messages_patch: list | None = <span class="tok-k">None</span>   <span class="tok-c"># RemoveMessage / 替换消息</span>
+    metrics: list = ...                 <span class="tok-c"># 策略级指标</span>
+    jump_to: str | None = <span class="tok-k">None</span>          <span class="tok-c"># 跳转目标节点</span></code></pre>
+
+      <h3>DefaultStrategy 的分段预算（P0–P5）</h3>
+      <p>每次 <code>after_model</code> 用 token 计数器算 <code>fraction</code>（占用比例），按阈值触发不同动作：</p>
+      <table>
+        <tr><th>阶段</th><th>阈值</th><th>动作</th></tr>
+        <tr><td>P1 externalize</td><td>40%</td><td>把历史消息<strong>外化</strong>到文件，替换为预览引用（间隔抑制 +10% 防抖）。</td></tr>
+        <tr><td>P2 thinking</td><td>50%</td><td>标记推理内容（reasoning_content）。</td></tr>
+        <tr><td>P3 observations</td><td>60%</td><td>观察 top-N（渲染层筛）。</td></tr>
+        <tr><td>P4 summarize</td><td>80%</td><td><strong>压缩</strong>：先快照，再 LLM 摘要，保留最近 6 条。</td></tr>
+        <tr><td>P5 stop toolcall</td><td>90%</td><td>剥掉最后 AIMessage 的 tool_calls + 注入「收尾」提示 + <code>jump_to="model"</code>。</td></tr>
+        <tr><td>hard_stop</td><td>99%</td><td>强制收尾，禁止再调工具。</td></tr>
+      </table>
+      <div class="note green">
+        <strong>突破点</strong>：窗口大小通过 <code>resolve_window_size(model)</code> <strong>穿透 FallbackChatModel</strong>
+        拿到真实 provider 的 context window，而不是硬编码阈值——因此 P5 熔断阈值在切换 provider 后依然准确。
+      </div>
+      <p>治理层还自带<strong>防御性配对校验</strong>：送 LLM 前确保每个 <code>AIMessage(tool_calls)</code> 都有配对的 <code>ToolMessage</code>，缺失则补占位——避免 API 400。</p>
+    </section>
+
+    <!-- 8 -->
+    <section id="memory">
+      <span class="sec-id">Memory</span>
+      <h2 class="sec-title">五层长期记忆系统</h2>
+      <p>认知科学启发的五层记忆，每层独立可测。核心原则贯穿：<strong>工具里无 LLM</strong>，纯数据操作。</p>
+      <table>
+        <tr><th>层</th><th>角色</th><th>关键实现</th></tr>
+        <tr><td><b>L1</b> Schema + Protocol</td><td>数据契约</td><td><code>MemoryTrace</code> 冻结 dataclass（15 字段）+ <code>MemoryType</code> 枚举（episodic/semantic/procedural）+ 5 原子操作。</td></tr>
+        <tr><td><b>L2</b> Default Strategies</td><td>衰减/遗忘</td><td>艾宾浩斯衰减公式 <code>strength = base×(1-decay)^hours + log(1+access)×0.1 + importance×0.05</code>；复合遗忘（TTL + 强度阈值）；<strong>懒衰减</strong>——检索时才算强度，无后台任务。</td></tr>
+        <tr><td><b>L3</b> Store + Retriever</td><td>持久化/检索</td><td><code>MarkdownFileStore</code>（单 <code>traces.md</code> 真相源 + <code>&lt;!-- trace: {id} --&gt;</code> 分隔 + YAML frontmatter）；<code>HybridRetriever</code>（<strong>纯 BM25</strong>，无向量/图依赖）。</td></tr>
+        <tr><td><b>L4</b> Middleware + Bootstrap</td><td>注入/生命周期</td><td><code>MemoryMiddleware.abefore_model</code> 每调用注入 <code>HumanMessage</code>（保护缓存）+ <code>set_turn_id</code> ContextVar。</td></tr>
+        <tr><td><b>L5</b> Auto-Consolidation</td><td>后台巩固</td><td><code>MemoryConsolidationMiddleware.aafter_model</code> 非阻塞提交 + <code>MemoryWorker</code>（daemon 线程 + 队列 + LLM 注入），LLM 抽取 episodic → 满 N 条 → LLM 生成合并内容 → <code>manager.consolidate</code>。</td></tr>
+      </table>
+
+      <h3>检索与巩固的机制细节</h3>
+      <div class="grid2">
+        <div class="card">
+          <h4>HybridRetriever（纯 BM25）</h4>
+          <ul class="tight">
+            <li><strong>复合分数</strong>：<code>score = similarity×0.7 + strength×0.3</code>。</li>
+            <li><strong>检索强化写回</strong>：命中后 <code>store.update</code> 增强 strength。</li>
+            <li><strong>遗忘过滤</strong>：<code>metadata.forgotten=True</code> 直接排除。</li>
+            <li><strong>增量索引</strong>：store 装饰器触发 <code>on_trace_*</code> 维护倒排索引。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>DefaultMemoryManager（四操作）</h4>
+          <ul class="tight">
+            <li><strong>encode</strong>：id = <code>SHA256(content+type)[:16]</code>，同内容同类型幂等。</li>
+            <li><strong>associate</strong>：双向关联，超上限 LRU 淘汰最弱。</li>
+            <li><strong>consolidate</strong>：最多合并 10 条，旧 trace 标记 forgotten 不删除。</li>
+            <li><strong>reconsolidate</strong>：保留原强度 + <code>last_accessed=now</code>。</li>
+            <li>全程 append <code>operation_log</code>（可追溯），actor 取自 ContextVar。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note">
+        <strong>保护 prompt cache</strong>：记忆注入用<strong>每调用一条的 HumanMessage</strong>（不是塞进 system prompt），
+        不破坏 LLM 的 prompt 缓存前缀；<code>recalled_memories</code> 只存索引（id+score+strength），不存全量内容。
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="tools">
+      <span class="sec-id">Tools</span>
+      <h2 class="sec-title">工具生态：MCP + 内置 + 沙箱</h2>
+      <p>工具来源有三类，统一进 <code>CapabilityRegistry.tools</code>，由 <code>get_available_tools(groups=...)</code> 按组筛选。</p>
+      <div class="grid3">
+        <div class="card">
+          <h4>内置工具</h4>
+          <p><code>ddg_search</code>（DuckDuckGo）、<code>read_snapshot</code>、<code>skill_search</code>、<code>ask_help</code>。MCP 关闭时是唯一搜索来源。</p>
+        </div>
+        <div class="card">
+          <h4>MCP 工具</h4>
+          <p>三传输 <code>stdio / sse / http</code>；core 启动加载、deferred 按需；<code>.sherlocking/mcp_servers.yaml</code> 配置；带安全 guards（凭据清洗、描述扫描、env 过滤）。</p>
+        </div>
+        <div class="card">
+          <h4>沙箱工具</h4>
+          <p>8 个（bash / write_file / str_replace / present_files 等），由 <code>make_sandbox_tools</code> 生成，路由到 Local/Docker provider。</p>
+        </div>
+      </div>
+      <p>还支持<strong>工具等价回退链</strong>：例如 <code>web_search</code> → MCP server → 内置 ddg，保证搜索韧性。工具元数据进一步驱动外化层的阈值。</p>
+    </section>
+
+    <!-- 10 -->
+    <section id="sandbox">
+      <span class="sec-id">Sandbox</span>
+      <h2 class="sec-title">沙箱隔离与路径强制</h2>
+      <p>双 provider：<strong>Local</strong>（宿主进程，开发）与 <strong>Docker</strong>（容器隔离，生产）。沙箱中间件做懒获取生命周期管理。</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>生命周期（SandboxMiddleware）</h4>
+          <ul class="tight">
+            <li><strong>懒获取</strong>：首次调沙箱工具才 <code>acquire(thread_id)</code>，无 before_agent。</li>
+            <li><strong>共享线程沙箱</strong>：<code>abefore_model</code> 从 <code>state["sandbox"]</code> 恢复 ContextVar，子 agent 复用父 <code>sandbox_id</code> 而不重复获取。</li>
+            <li><strong>after_agent release</strong>：释放但不销毁（Local 是 no-op）。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Docker 模式的突破</h4>
+          <ul class="tight">
+            <li><code>DockerPathTranslator</code>：<code>/mnt/sherlocking/user-data/&lt;x&gt;</code> → Windows 宿主真实路径。</li>
+            <li><code>DockerPathGuard</code>：写路径白名单，强制 agent 写入挂载区（否则 <code>--rm</code> 丢容器内临时文件）。</li>
+            <li>预热池 + 空闲自动销毁（10min）+ 跨进程锁 + WSL2 执行器。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note blue">
+        <code>present_files</code> 的产物链：从挂载区复制到固定 <code>.sherlocking/outputs/</code>，再注册到 <code>ArtifactServer</code> 供 HTTP 下载——用户永远知道产出物在哪。
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section id="multiagent">
+      <span class="sec-id">Multi-Agent</span>
+      <h2 class="sec-title">多智能体编排</h2>
+      <p>两种委托方式，都通过 <code>delegate_to_*</code> 工具暴露给 leader 的 LLM 决策（soft routing，编排决策是 LLM 做的）。</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>🤖 Specialist Delegation（外部专家）</h4>
+          <p><code>delegate_to_specialist</code> 路由到外部 CLI（<strong>pi / codex / claude</strong>），经 MCP <code>SpecialistMcpServer</code> 暴露 8 个沙箱工具。每个专家独立进程、独立 LLM，但通过 <code>--sandbox-url</code> 共享同一 Docker 沙箱。</p>
+        </div>
+        <div class="card">
+          <h4>🧬 Subagent（自我复制）</h4>
+          <p><code>delegate_to_subagent</code> 创建 Sherlocking 自拷贝：<strong>隔离上下文</strong>（不继承父消息历史）但<strong>共享线程沙箱</strong>。由 <code>SubagentRuntime</code> 调 <code>agent_factory</code> 造 leaf-role 子 agent。</p>
+        </div>
+      </div>
+      <div class="note green">
+        <strong>递归防护（INVARIANT）</strong>：<code>_subagent_factory</code> 闭包构造 leaf agent 时传
+        <code>specialist_tools=None</code> + <code>orchestration_middleware=None</code>——
+        子 agent 看不到 <code>delegate_to_*</code> 工具，无法再 spawn，实现 max_spawn_depth=1 的 leaf-only MVP。
+      </div>
+      <p>此外还有 <strong>L2 进化层</strong>（MetricMonitor 触发 → IVEFocuser 诊断 → LLMMutator 变异 → ScoreDeltaGate 门控 → GitRatchet 回滚）与 <strong>L3 评测层</strong>（执行判断 + 四维任务质量 + 响应契约检查），让专家能力数据驱动自进化。</p>
+    </section>
+
+    <!-- 12 -->
+    <section id="skill">
+      <span class="sec-id">Skill</span>
+      <h2 class="sec-title">三层技能架构</h2>
+      <p>技能是<strong>研究流程知识包</strong>——提示级注入，不是可执行函数。「如何验证来源」是技能，「执行搜索」是工具。</p>
+      <div class="grid3">
+        <div class="card"><h4>Layer 1 基础</h4><p>SQLite 存储 + 版本 DAG + 质量过滤的 LLM 混合选择 + 注入中间件 + 四计数器（选择/应用/完成/回退）。</p></div>
+        <div class="card"><h4>Layer 2 进化</h4><p>有效率低于阈值时自动进化：<code>IVEFocuser</code> 诊断、<code>LLMMutator</code> 变异、<code>ScoreDeltaGate</code> 门控、<code>GitRatchet</code> 回滚。</p></div>
+        <div class="card"><h4>Layer 3 评测</h4><p>执行判断 + 任务质量评分（四维加权）+ 响应契约检查；<code>RuntimeTracker</code> 把退化信号回喂 L2。</p></div>
+      </div>
+      <p>共 36 个内置技能、5 大类（core / research / software-development / creative / productivity）；core 自动加载，其余经 <code>/skill search</code> 发现。</p>
+    </section>
+
+    <!-- 13 -->
+    <section id="model">
+      <span class="sec-id">Model</span>
+      <h2 class="sec-title">多 LLM 路由与降级</h2>
+      <p>
+        <code>ModelRouter</code> 按<strong>角色</strong>（researcher / reporter）构造路由链。
+        每个角色得到一条 <code>FallbackChatModel</code>：遇到瞬时故障（限流/超时/5xx）自动降级到下一 provider，<strong>DeepSeek 永远在链尾兜底</strong>。
+      </p>
+      <pre><code><span class="tok-k">class</span> <span class="tok-f">ModelRouter</span>:
+    <span class="tok-k">def</span> <span class="tok-f">build_model</span>(self, role):
+        chain = route_chain_for(role, self._providers)
+        models = [build_chat_model(p) <span class="tok-k">for</span> p <span class="tok-k">in</span> chain]
+        <span class="tok-k">return</span> FallbackChatModel(models=models, provider_names=[p.provider ...])
+
+    <span class="tok-k">def</span> <span class="tok-f">build_single</span>(self, provider, model):   <span class="tok-c"># CLI --provider 强制单 provider</span>
+        cfg = select_provider_config(provider=provider, model=model)
+        <span class="tok-k">return</span> build_chat_model(cfg)</code></pre>
+      <p>上下文中 <code>_resolve_actual_model_name</code> 会取 <code>FallbackChatModel.provider_names</code>——反映<strong>真实路由链</strong>，而非静态配置名（配置可能是 fake-researcher）。</p>
+    </section>
+
+    <!-- 14 -->
+    <section id="observability">
+      <span class="sec-id">Observability</span>
+      <h2 class="sec-title">可观测性</h2>
+      <div class="grid2">
+        <div class="card">
+          <h4>RunJournal</h4>
+          <p>结构化事件（<code>skill.select</code>、<code>skill.apply</code>、<code>memory.encode</code>、<code>memory.consolidate</code>、<code>compaction</code>、<code>budget</code>）写入 thread 目录的 JSONL。</p>
+        </div>
+        <div class="card">
+          <h4>RunManager</h4>
+          <p>管理 run 生命周期：<code>create_run → mark_running → mark_success / mark_failed</code>，run 目录持久化产物。</p>
+        </div>
+        <div class="card">
+          <h4>stream 事件</h4>
+          <p><code>sandbox_update</code>、<code>compaction_start/end</code>、<code>budget_update</code> 实时推给 TUI/CLI 渲染。</p>
+        </div>
+        <div class="card">
+          <h4>操作日志</h4>
+          <p>记忆操作附 <code>operation_log</code>（时间戳/actor/diff），治理层写 <code>compaction.jsonl</code>，全链路可追溯。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 15 -->
+    <section id="files">
+      <span class="sec-id">Files</span>
+      <h2 class="sec-title">关键代码路径索引</h2>
+      <table>
+        <tr><th>关注点</th><th>文件</th><th>作用</th></tr>
+        <tr><td>入口</td><td><code>backend/app/cli/main.py</code></td><td><code>sherlocking</code> 命令入口，TUI/CLI/run 三模式。</td></tr>
+        <tr><td>装配</td><td><code>backend/app/bootstrap.py</code></td><td><code>bootstrap_runtime</code> 组装一切，AppRuntime 提供热切换。</td></tr>
+        <tr><td>薄壳</td><td><code>backend/agents/leader/agent.py</code></td><td><code>LeaderAgent.run()</code> 调图。</td></tr>
+        <tr><td>图工厂</td><td><code>backend/agents/leader/factory.py</code></td><td><code>make_lead_agent</code> + <code>_build_middlewares</code> 装配顺序。</td></tr>
+        <tr><td>系统提示</td><td><code>backend/agents/leader/prompts.py</code></td><td>按模式拼装 identity/constraints/guidance/专家路由/技能原则。</td></tr>
+        <tr><td>状态</td><td><code>backend/agents/state/types.py</code></td><td><code>ThreadState</code> + 各领域 dataclass。</td></tr>
+        <tr><td>能力容器</td><td><code>backend/agents/capabilities/registry.py</code></td><td><code>CapabilityRegistry</code> 统一存放模型/工具/各 provider。</td></tr>
+        <tr><td>中间件</td><td><code>backend/agents/middlewares/*.py</code></td><td>20+ 中间件实现。</td></tr>
+        <tr><td>上下文治理</td><td><code>backend/agents/context_engineering/</code></td><td>契约 + 策略 bundle + 适配器 + 默认策略（P0–P5）。</td></tr>
+        <tr><td>记忆</td><td><code>backend/agents/memory/</code></td><td>五层：schema/strategies/store+retriever/middleware/worker。</td></tr>
+        <tr><td>沙箱</td><td><code>backend/agents/sandbox/</code></td><td>contracts + local/docker provider + translators + guards。</td></tr>
+        <tr><td>多智能体</td><td><code>backend/agents/multiagent/</code></td><td>middleware + runtimes + specialists + evolution + eval。</td></tr>
+        <tr><td>技能</td><td><code>backend/agents/skill/</code></td><td>三层技能 + 36 内置技能 + 进化/评测。</td></tr>
+        <tr><td>模型路由</td><td><code>backend/agents/config/model_router.py</code> + <code>fallback_model.py</code></td><td>角色路由 + FallbackChatModel 降级。</td></tr>
+        <tr><td>配置</td><td><code>backend/agents/config/schema.py</code> + <code>profiles/*.yaml</code></td><td>AppConfig 冻结 dataclass + YAML profile。</td></tr>
+      </table>
+    </section>
+
+    <div class="footer">
+      本页由对 <code>sherlocking</code> 仓库代码的阅读整理而成，聚焦「它如何搭建这个 Agent」——
+      薄壳 Leader + LangGraph 编译图 + 中间件横切 + 分层记忆 + 多智能体 + 沙箱隔离。
+      核心结论：<strong>智能体 = 编译图，能力 = 中间件，状态 = checkpointer，边界 = 依赖注入与单向依赖</strong>。
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // 侧边栏高亮当前章节（IntersectionObserver）
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) map[id] = a;
+    });
+    var sections = Object.keys(map).map(function (id) { return document.getElementById(id); });
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          links.forEach(function (a) { a.classList.remove('active'); });
+          var a = map[e.target.id];
+          if (a) a.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+    sections.forEach(function (s) { observer.observe(s); });
+  })();
+</script>
+</body>
+</html>
