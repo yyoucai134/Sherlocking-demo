@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 import sys
 import time
 from logging.handlers import RotatingFileHandler
@@ -41,6 +42,11 @@ _LOG_MAX_BYTES = 10 * 1024 * 1024  # 单个日志文件 10MB
 _LOG_BACKUP_COUNT = 5  # 最多保留 5 个轮转文件（约 50MB 封顶，防止撑爆小硬盘）
 
 logger = logging.getLogger("sherlocking.web")
+
+# WebSocket token auth. Keep the token out of the URL so it is not leaked via
+# browser history, reverse-proxy access logs, or referrer headers.
+_WEB_AUTH_TOKEN = os.getenv("SHERLOCKING_WEB_AUTH_TOKEN", "").strip()
+_MAX_AUTH_FAILURES = 3
 
 
 class _SidFilter(logging.Filter):
@@ -176,6 +182,11 @@ async def websocket_chat(ws: WebSocket):
     client = f"{ws.client.host}:{ws.client.port}" if ws.client else "未知来源"
     log.info("🔌 WebSocket 已连接 | 来源=%s", client)
 
+    authenticated = not _WEB_AUTH_TOKEN
+    auth_failures = 0
+    if not authenticated:
+        await ws.send_json({"type": "auth_required"})
+
     # 为每个 WebSocket 连接创建独立的 AppRuntime
     runtime: AppRuntime | None = None
     # 当前正在运行的任务（用于取消）
@@ -200,6 +211,25 @@ async def websocket_chat(ws: WebSocket):
 
             msg_type = msg.get("type", "")
             content = msg.get("content", "").strip()
+
+            # Authentication happens before runtime/sandbox initialization.
+            if not authenticated:
+                if msg_type != "auth":
+                    await ws.send_json({"type": "auth_required"})
+                    continue
+                supplied_token = str(msg.get("token", ""))
+                if not secrets.compare_digest(supplied_token, _WEB_AUTH_TOKEN):
+                    auth_failures += 1
+                    log.warning("🔒 WebSocket 鉴权失败 | attempt=%d", auth_failures)
+                    await ws.send_json({"type": "auth_failed", "content": "鉴权失败"})
+                    if auth_failures >= _MAX_AUTH_FAILURES:
+                        await ws.close(code=1008, reason="authentication failed")
+                        return
+                    continue
+                authenticated = True
+                await ws.send_json({"type": "auth_ok"})
+                await ws.send_json({"type": "status", "content": "connected"})
+                continue
 
             # 心跳检测
             if msg_type == "ping":
@@ -607,6 +637,11 @@ def run_web_server(
         port: 监听端口（默认 8080）
         reload: 是否开启热重载（开发用）
     """
+    if host not in {"127.0.0.1", "localhost", "::1"} and not _WEB_AUTH_TOKEN:
+        raise RuntimeError(
+            "SHERLOCKING_WEB_AUTH_TOKEN must be set when the Web server binds "
+            "to a non-localhost address"
+        )
     import uvicorn
 
     # 先初始化日志（控制台 + 文件轮转），再启动 uvicorn
