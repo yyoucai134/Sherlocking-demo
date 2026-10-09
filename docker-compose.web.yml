@@ -7,9 +7,11 @@
 #   停止:           docker compose -f docker-compose.web.yml down
 #   更新代码后重建:  docker compose -f docker-compose.web.yml up -d --build
 #
-# 访问地址: http://服务器公网IP:8080
+# 访问地址: https://你的域名（由 nginx 容器占用 80/443 统一入口）
 # 前提: Ubuntu Docker Engine 已运行；项目根目录的 .env 中已填写
 # DEEPSEEK_API_KEY、SHERLOCKING_WEB_AUTH_TOKEN，并已按需拉取沙箱镜像。
+# HTTPS: 证书放入 nginx/certs/ 后再启动（文件名见 nginx/conf.d/sherlocking.conf 头部说明）。
+#        阿里云安全组需同时放行 TCP 80 和 443。
 
 services:
   sherlocking-web:
@@ -42,9 +44,10 @@ services:
       - SHERLOCKING_LOG_LEVEL=INFO
     # 覆盖镜像默认的命令行入口，改为启动网页服务
     command: ["web", "--host", "0.0.0.0", "--port", "8080"]
-    ports:
-      # 宿主机 80 端口 -> 容器 8080 端口（公网部署用 80，服务器内部仍是 8080）
-      - "80:8080"
+    # 不再直接映射宿主机 80 端口：由同 compose 内的 nginx 容器统一对外，
+    # sherlocking-web 只在 Docker 内部网络暴露 8080，外部无法直连。
+    expose:
+      - "8080"
     extra_hosts:
       # Ubuntu 20.10+ / Docker Engine：让容器访问宿主机映射端口。
       - "host.docker.internal:host-gateway"
@@ -54,3 +57,22 @@ services:
       - ./skills:/app/skills
       # Docker Sandbox Provider 需要创建/销毁独立沙箱容器。
       - /var/run/docker.sock:/var/run/docker.sock
+
+  # ------------------------------------------------------------
+  # Nginx：HTTPS 统一入口（80 跳转 443，证书卸载，WebSocket 透传）
+  # 配置文件：nginx/conf.d/sherlocking.conf
+  # 证书目录：nginx/certs/（需手动放入 .crt 和 .key，见配置文件头注释）
+  # ------------------------------------------------------------
+  nginx:
+    image: nginx:stable-alpine
+    container_name: sherlocking-nginx
+    restart: unless-stopped
+    depends_on:
+      - sherlocking-web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # 只读挂载 Nginx 配置与证书，更新证书只需替换文件后重启本容器
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
