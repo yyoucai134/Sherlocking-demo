@@ -3,6 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import BaseTool
 
 from sherlocking.backend.agents.agent_tools.builtin.ask_help import ask_help_tool
+from sherlocking.backend.agents.agent_tools.builtin.browse_page import browse_page_tool
 from sherlocking.backend.agents.agent_tools.builtin.ddg_search import web_search_tool
 from sherlocking.backend.agents.agent_tools.builtin.read_snapshot import read_snapshot
 from sherlocking.backend.agents.agent_tools.builtin.skill_search import skill_search
@@ -18,5 +19,5 @@ def get_builtin_tools() -> list[BaseTool]:
     skill_search 归 core group（default + expert 都加载）——让 agent 接到 specialized task
     时主动 check 是否有相关 skill（find-skills 主动触发，设计文档 46 §3.2）。
     """
-    return [web_search_tool, read_snapshot, ask_help_tool, skill_search]
+    return [web_search_tool, browse_page_tool, read_snapshot, ask_help_tool, skill_search]
 

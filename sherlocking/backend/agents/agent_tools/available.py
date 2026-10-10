@@ -49,7 +49,7 @@ def get_available_tools(
     """加载 builtin 工具，可选按 group 过滤。
 
     MCP 工具由 McpManager 管理（bootstrap 通过 build_mcp_manager 加载），
-    此函数只返 builtin 工具（ddg_search + read_snapshot）。
+    此函数只返 builtin 工具（web_search + browse_page + read_snapshot 等）。
     sandbox 工具由 bootstrap 注入 CapabilityRegistry，不在此加载。
 
     Args:
