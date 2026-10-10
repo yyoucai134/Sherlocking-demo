@@ -1627,14 +1627,10 @@ body {
     </div>
     <div class="modal-body">
       <div class="setting-row">
-        <label>WebSocket 地址</label>
-        <input type="text" id="setting-ws-url" placeholder="默认与当前页面同地址（留空）">
+        <label>访问密码</label>
+        <input type="password" id="setting-auth-token" placeholder="请输入访问密码" autocomplete="current-password">
       </div>
-      <div class="setting-row">
-        <label>访问 Token</label>
-        <input type="password" id="setting-auth-token" placeholder="服务端 SHERLOCKING_WEB_AUTH_TOKEN">
-      </div>
-      <div class="setting-note">Token 仅保存在当前浏览器的本地存储中，不会写入 WebSocket 地址。</div>
+      <div class="setting-note">访问密码仅保存在当前浏览器中，不会上传到其他地方。</div>
       <div class="settings-actions">
         <button class="btn-primary" onclick="saveSettings()">保存</button>
       </div>
@@ -1845,9 +1841,27 @@ function markConnected() {
   setConnState(true, '已连接');
   updateSidebar();
   startPingInterval();
+  // 认证成功：若密码弹窗因旧连接竞态还开着，自动收起
+  closeSettings();
 }
 
 function connectWs() {
+  // 清掉挂起的重连定时器，避免与新连接并发、重复建连
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  // 主动替换旧连接：先摘掉事件处理器再关闭，
+  // 避免旧连接的 onclose 又触发一轮重连并把 UI 状态改回"断开中"
+  if (ws) {
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    try { ws.close(); } catch (_) {}
+    ws = null;
+  }
+
   const url = getWsUrl();
   console.log('[Sherlocking] 连接 WebSocket:', url);
 
@@ -1941,9 +1955,13 @@ function handleServerMessage(msg) {
     case 'auth_required':
       STATE.connected = false;
       STATE.authenticated = false;
-      setConnState(false, '需要 Token');
-      showToast('请输入访问 Token');
-      openSettings();
+      setConnState(false, '需要密码');
+      // 本地已存密码时，onopen 会自动发送认证，无需弹窗打扰；
+      // 只有首次访问、还没存过密码时才弹出输入框
+      if (!getAuthToken()) {
+        showToast('请输入访问密码');
+        openSettings();
+      }
       break;
     case 'auth_ok':
       markConnected();
@@ -1951,9 +1969,12 @@ function handleServerMessage(msg) {
     case 'auth_failed':
       STATE.connected = false;
       STATE.authenticated = false;
-      setConnState(false, '鉴权失败');
-      showToast('访问 Token 不正确');
-      openSettings();
+      setConnState(false, '密码错误');
+      // 弹窗已经打开时不重复弹、不重复刷 Toast
+      if (!$('#settings-panel').classList.contains('visible')) {
+        showToast('访问密码不正确，请重新输入');
+        openSettings();
+      }
       break;
     case 'status':
       handleStatus(msg);
@@ -2404,7 +2425,6 @@ function runCommand(cmd) {
 
 // ---- 设置面板 ----
 function openSettings() {
-  $('#setting-ws-url').value = getWsUrl();
   $('#setting-auth-token').value = getAuthToken();
   $('#settings-panel').classList.add('visible');
 }
@@ -2412,15 +2432,11 @@ function closeSettings() {
   $('#settings-panel').classList.remove('visible');
 }
 function saveSettings() {
-  const url = $('#setting-ws-url').value.trim();
   const token = $('#setting-auth-token').value.trim();
-  if (url) localStorage.setItem('sherlocking_ws_url', url);
-  else localStorage.removeItem('sherlocking_ws_url');
   if (token) localStorage.setItem('sherlocking_web_auth_token', token);
   else localStorage.removeItem('sherlocking_web_auth_token');
-  showToast('设置已保存，重新连接中...');
   closeSettings();
-  if (ws) ws.close();
+  showToast('访问密码已保存，正在连接...');
   connectWs();
 }
 
