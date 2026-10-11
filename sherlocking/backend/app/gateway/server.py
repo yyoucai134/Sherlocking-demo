@@ -241,6 +241,49 @@ def _make_app() -> FastAPI:
             headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
         )
 
+    def _find_latest_report(thread_dir: Path) -> Path | None:
+        """找到当前会话最新的研究报告文件。
+
+        覆盖两个落盘位置：
+        - expert 模式自动保存：runs/<run_id>/artifacts/final_report.md
+        - 手动 /report 命令：  artifacts/report.md
+        取修改时间最新的一份；做目录边界校验防止路径穿越。
+        """
+        base = thread_dir.resolve()
+        if not base.is_dir():
+            return None
+        candidates = [
+            p for p in base.glob("runs/*/artifacts/final_report.md") if p.is_file()
+        ]
+        manual = base / "artifacts" / "report.md"
+        if manual.is_file():
+            candidates.append(manual)
+        if not candidates:
+            return None
+        report = max(candidates, key=lambda p: p.stat().st_mtime).resolve()
+        # 二次确认最终路径仍在会话目录内
+        if not str(report).startswith(str(base)):
+            return None
+        return report
+
+    @app.get("/api/report")
+    async def download_report(
+        thread_id: str = Query(...),
+        authorization: str | None = Header(None),
+    ):
+        """下载当前会话最新一次深度研究生成的 Markdown 报告。"""
+        require_http_auth(authorization)
+        runtime = get_runtime_for_thread(thread_id)
+        report = _find_latest_report(runtime.thread_dir)
+        if report is None:
+            raise HTTPException(status_code=404, detail="report not found")
+        content = await asyncio.to_thread(report.read_bytes)
+        return Response(
+            content=content,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{report.name}"'},
+        )
+
     # favicon（避免浏览器 404 日志）
     @app.get("/favicon.ico")
     async def favicon():
@@ -603,6 +646,17 @@ async def _stream_chat(
                 counters=counters,
             )
             await ws.send_json(serializable)
+
+        # 研究报告落盘通知：expert 模式会把 final_report.md 写入本次 run 的 artifacts 目录，
+        # 推送事件给前端展示"下载报告"卡片（文件由下方 /api/report 接口鉴权下载）。
+        if ctx is not None:
+            report_path = ctx.output_dir / "artifacts" / "final_report.md"
+            if report_path.is_file():
+                await ws.send_json({
+                    "type": "artifact_ready",
+                    "filename": "final_report.md",
+                    "title": "深度研究报告",
+                })
 
         if ctx is not None:
             runtime.run_manager.mark_success(ctx.run_id)

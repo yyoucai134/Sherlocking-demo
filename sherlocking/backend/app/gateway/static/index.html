@@ -699,6 +699,50 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-size: 13px;
 }
 
+/* ---- 研究报告交付卡 ---- */
+.msg-row.artifact { max-width: 560px; }
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--moss-soft);
+  border: 1px solid #b9cabf;
+  border-left: 3px solid var(--moss);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-card);
+}
+.artifact-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--moss);
+  color: #f4f7f3;
+}
+.artifact-meta { flex: 1; min-width: 0; }
+.artifact-title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.artifact-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.artifact-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--moss);
+  background: var(--moss);
+  color: #f4f7f3;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.artifact-btn:hover { background: #4f6a57; transform: translateY(-1px); }
+.artifact-btn:disabled { opacity: 0.65; cursor: default; transform: none; }
+
 /* ---- 命令回显：等宽纸卡 ---- */
 .msg-row.command .msg-content {
   background: var(--paper-sunken);
@@ -2000,6 +2044,9 @@ function handleServerMessage(msg) {
     case 'done':
       handleDone();
       break;
+    case 'artifact_ready':
+      handleArtifactReady(msg);
+      break;
     case 'error':
       handleError(msg);
       break;
@@ -2156,6 +2203,78 @@ function handleDone() {
   // 重新聚焦输入框
   convInput.focus();
   scrollToBottom();
+}
+
+// ---- 研究报告交付：报告落盘后展示下载卡片 ----
+function handleArtifactReady(msg) {
+  flushThinking();
+  const filename = (msg.filename || 'final_report.md').replace(/[^a-zA-Z0-9._-]/g, '');
+  const title = msg.title || '深度研究报告';
+
+  const row = document.createElement('div');
+  row.className = 'msg-row artifact';
+  row.innerHTML = `
+    <div class="artifact-card">
+      <div class="artifact-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 3v5h5"/>
+          <path d="M9 13h6M9 17h6"/>
+        </svg>
+      </div>
+      <div class="artifact-meta">
+        <div class="artifact-title">${title}已生成</div>
+        <div class="artifact-sub">Markdown 文件 · 点击按钮下载到本地</div>
+      </div>
+      <button class="artifact-btn" type="button">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <path d="M7 10l5 5 5-5"/>
+          <path d="M12 15V3"/>
+        </svg>
+        下载报告
+      </button>
+    </div>`;
+
+  const btn = row.querySelector('.artifact-btn');
+  btn.addEventListener('click', () => downloadReport(filename, btn));
+  msgList.appendChild(row);
+  scrollToBottom();
+}
+
+async function downloadReport(filename, btn) {
+  if (!STATE.threadId) {
+    showToast('会话已失效，请刷新页面后重试');
+    return;
+  }
+  const oldHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '下载中…';
+  try {
+    const resp = await fetch(
+      `${getApiBaseUrl()}/api/report?thread_id=${encodeURIComponent(STATE.threadId)}`,
+      { headers: apiHeaders() }
+    );
+    if (!resp.ok) {
+      showToast(resp.status === 404 ? '报告文件不存在或已被清理' : '报告下载失败，请稍后重试');
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    btn.textContent = '已下载';
+    setTimeout(() => { btn.disabled = false; btn.innerHTML = oldHtml; }, 2000);
+  } catch (_) {
+    showToast('网络异常，报告下载失败');
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
 }
 
 function handleError(msg) {

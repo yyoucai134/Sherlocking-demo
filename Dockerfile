@@ -18,17 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Docker CLI（仅客户端，不装 daemon）：
-# Web 容器通过挂载的 /var/run/docker.sock 在宿主机上创建/销毁代码执行沙箱（DooD 模式）。
-# 用官方静态二进制，避免添加 apt 源；x86_64/arm64 自动适配。
-RUN DOCKER_CLI_VERSION=27.3.1 \
-    && arch="$(dpkg --print-architecture)" \
-    && curl -fsSL "https://download.docker.com/linux/static/stable/${arch}/docker-${DOCKER_CLI_VERSION}.tgz" \
-       | tar -xz -C /tmp \
-    && mv /tmp/docker/docker /usr/local/bin/docker \
-    && chmod +x /usr/local/bin/docker \
-    && rm -rf /tmp/docker
-
 WORKDIR /app
 
 # 先复制依赖描述（利用 Docker layer cache）
