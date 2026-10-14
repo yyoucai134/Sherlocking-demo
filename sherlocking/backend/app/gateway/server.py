@@ -29,6 +29,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
+from langchain_core.messages import AIMessage, ToolMessage
 
 from sherlocking.backend.app.bootstrap import bootstrap_runtime, AppRuntime
 from sherlocking.backend.app.services.stream_service import SherlockingStreamClient, StreamEvent
@@ -518,6 +519,56 @@ def _init_runtime() -> AppRuntime:
         return future.result(timeout=60)
 
 
+def _repair_dangling_tool_calls(runtime: AppRuntime, log: logging.LoggerAdapter) -> None:
+    """修复被中断任务留下的"悬空工具调用"。
+
+    用户点「停止」或连接中断时，graph 可能停在"模型已声明 tool_calls、但工具
+    结果未写回"的状态。这些坏账留在对话历史里，下次整段历史发给模型 API 会
+    被 400 拒收（insufficient tool messages following tool_calls message）。
+
+    此处在每次新提问进图之前检查 checkpointer 里的消息序列，把缺失的工具
+    "答卷"补上占位 ToolMessage（与 context_engineering._ensure_pairing 同思路），
+    让历史恢复合法。修复失败只告警、不阻塞本次对话。
+    """
+    try:
+        graph = runtime.leader_agent.graph
+        config = {"configurable": {"thread_id": runtime.thread_id}}
+        snapshot = graph.get_state(config)
+        messages = (snapshot.values or {}).get("messages", []) if snapshot else []
+        if not messages:
+            return
+
+        answered = {m.tool_call_id for m in messages if isinstance(m, ToolMessage)}
+        patch: list[ToolMessage] = []
+        for msg in messages:
+            if not isinstance(msg, AIMessage):
+                continue
+            for tc in msg.tool_calls or []:
+                tc_id = tc.get("id") if isinstance(tc, dict) else None
+                if tc_id and tc_id not in answered:
+                    answered.add(tc_id)  # 同一 id 只补一条
+                    patch.append(ToolMessage(
+                        content="⚠️ 任务被用户停止，该工具调用未执行完成，无结果。",
+                        tool_call_id=tc_id,
+                        status="error",
+                    ))
+        if not patch:
+            return
+
+        # update_state 不指定 as_node 时由 checkpoint 推断最后写入节点；
+        # 若推断失败，按 langchain 版本兜底（1.x 叫 model，旧版叫 agent）
+        try:
+            graph.update_state(config, {"messages": patch})
+        except Exception:
+            try:
+                graph.update_state(config, {"messages": patch}, as_node="model")
+            except Exception:
+                graph.update_state(config, {"messages": patch}, as_node="agent")
+        log.warning("🔧 已补齐 %d 条被中断的工具调用记录（上次任务被停止/中断）", len(patch))
+    except Exception as exc:
+        log.warning("修复悬空工具调用失败（不阻塞对话）: %s", exc)
+
+
 async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> AppRuntime:
     """处理 / 命令（简化版，仅支持常用命令）。返回可能被替换的 runtime（模式切换时）。"""
     cmd_lower = cmd.lower().strip()
@@ -622,6 +673,9 @@ async def _stream_chat(
 
     try:
         log.info("💬 用户提问: %s", _preview(question, 100))
+
+        # 先修复上次中断留下的"悬空工具调用"（点「停止」后再提问会 400 的根因）
+        _repair_dangling_tool_calls(runtime, log)
 
         # 创建 run context
         ctx = runtime.run_manager.create_run(
