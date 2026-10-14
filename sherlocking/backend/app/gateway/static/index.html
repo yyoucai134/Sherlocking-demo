@@ -1542,6 +1542,10 @@ body {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                   <span>添加文件</span><span class="composer-file-count" id="file-count">0</span>
                 </button>
+                <button class="composer-upload" id="conv-report-btn" type="button" title="下载本会话最新研究报告">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                  <span>下载报告</span>
+                </button>
                 <div class="composer-files" id="file-list"><span class="file-empty">尚未添加文件</span></div>
                 <span class="composer-hint">/ 调用命令 · Shift+Enter 换行</span>
               </div>
@@ -2082,6 +2086,13 @@ function handleStatus(msg) {
       uploadFiles(pending);
     }
     welcomeTip.textContent = '/help 查看命令 · 就绪';
+  } else if (content === 'mode_changed') {
+    STATE.mode = msg.mode || STATE.mode;
+    welcomeModeTag.textContent = STATE.mode;
+    statusMode.textContent = STATE.mode;
+    const topMode = $('#top-mode');
+    if (topMode) topMode.textContent = STATE.mode;
+    updateSidebar();
   } else {
     // 其他状态消息
     addMessage('system', content);
@@ -2126,22 +2137,9 @@ function handleToolStart(msg) {
   flushThinking();
 
   const toolName = msg.tool_name || 'unknown';
-  const toolArgs = msg.tool_args || {};
-  const argsStr = JSON.stringify(toolArgs);
-  const truncated = argsStr.length > 120 ? argsStr.slice(0, 120) + '...' : argsStr;
 
-  const card = addMessage('tool', '', 'tool-' + toolName + '-' + Date.now());
-  const contentEl = card.querySelector('.msg-content');
-  contentEl.innerHTML = `<span class="tool-name">${escapeHtml(toolName)}</span>`;
-  if (argsStr !== '{}') {
-    contentEl.innerHTML += `<span class="tool-args">${escapeHtml(truncated)}...</span>`;
-  }
-
-  // 记录活跃工具卡片
-  STATE.activeToolCards[toolName] = card;
-  scrollToBottom();
-
-  // 更新执行栏
+  // 工具调用的参数/结果属于内部执行细节，不在对话流中展示；
+  // 仅通过输入框上方的执行状态条提示"AI 正在做什么"。
   STATE.running = true;
   updateActionButtons();
   updateExecBar(toolName, 'start');
@@ -2149,19 +2147,7 @@ function handleToolStart(msg) {
 
 function handleToolEnd(msg) {
   const toolName = msg.tool_name || 'unknown';
-  const toolResult = msg.tool_result || '';
-
-  // 找到对应的 tool_start 卡片并追加结果
-  const card = STATE.activeToolCards[toolName];
-  if (card) {
-    const contentEl = card.querySelector('.msg-content');
-    const summary = toolResult.length > 200 ? toolResult.slice(0, 200) + '...' : toolResult;
-    contentEl.innerHTML += `<div class="tool-result">${escapeHtml(summary)}</div>`;
-    delete STATE.activeToolCards[toolName];
-  }
-
   updateExecBar(toolName, 'end');
-  scrollToBottom();
 }
 
 function handleBudgetUpdate(msg) {
@@ -2296,13 +2282,9 @@ function handleCommandResult(msg) {
 }
 
 function flushThinking() {
-  if (STATE.thinkingT0 && STATE.thinkingBuffer) {
-    const elapsed = Date.now() - STATE.thinkingT0;
-    const summary = `+ Thought: ${elapsed}ms`;
-    addMessage('thinking', summary);
-    STATE.thinkingT0 = null;
-    STATE.thinkingBuffer = '';
-  }
+  // 思考过程属于 AI 内部细节，不在对话流中展示，仅清空缓冲状态
+  STATE.thinkingT0 = null;
+  STATE.thinkingBuffer = '';
 }
 
 // ---- UI 更新 ----
@@ -2654,6 +2636,11 @@ document.querySelectorAll('.suggestion-chip').forEach(chip => {
 });
 
 $$('.upload-trigger').forEach(trigger => trigger.addEventListener('click', () => fileInput.click()));
+// 常驻"下载报告"按钮：随时下载本会话最新研究报告（不依赖实时 artifact_ready 事件）
+const reportBtn = $('#conv-report-btn');
+if (reportBtn) {
+  reportBtn.addEventListener('click', () => downloadReport('final_report.md', reportBtn));
+}
 fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
 fileDropZone.addEventListener('dragover', (event) => {
   event.preventDefault();

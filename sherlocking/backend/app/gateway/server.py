@@ -428,7 +428,7 @@ async def websocket_chat(ws: WebSocket):
 
             # 处理 / 命令（命令不需要异步任务，可以同步处理）
             if content.startswith("/"):
-                await _handle_command(ws, content, runtime)
+                runtime = await _handle_command(ws, content, runtime)
                 continue
 
             # 处理聊天消息——包装成 Task，并与"接收消息"并行等待
@@ -518,8 +518,8 @@ def _init_runtime() -> AppRuntime:
         return future.result(timeout=60)
 
 
-async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> None:
-    """处理 / 命令（简化版，仅支持常用命令）。"""
+async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> AppRuntime:
+    """处理 / 命令（简化版，仅支持常用命令）。返回可能被替换的 runtime（模式切换时）。"""
     cmd_lower = cmd.lower().strip()
 
     # /help — 列出可用命令
@@ -527,9 +527,8 @@ async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> None:
         commands_help = [
             "/help — 显示命令帮助",
             "/clear — 清空对话",
-            "/expert — 切换到专家模式",
+            "/expert — 切换到专家模式（自动生成深度报告）",
             "/default — 切换到默认模式",
-            "/thinking on|off — 开关思考过程显示",
             "/model — 显示当前模型",
             "/status — 显示运行状态",
         ]
@@ -537,24 +536,44 @@ async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> None:
             "type": "command_result",
             "content": "\n".join(commands_help),
         })
-        return
+        return runtime
 
     # /clear — 清屏（前端处理）
     if cmd_lower == "/clear":
         await ws.send_json({"type": "command_result", "content": "clear"})
-        return
+        return runtime
 
-    # /expert — 切换专家模式
+    # /expert — 切换专家模式（真正调用 switch_expert_mode，重建 leader_agent）
     if cmd_lower == "/expert":
+        if runtime.config.runtime.expert_mode:
+            await ws.send_json({"type": "command_result", "content": "当前已是专家模式"})
+            return runtime
         await ws.send_json({"type": "status", "content": "正在切换到专家模式..."})
-        await ws.send_json({"type": "command_result", "content": "已切换到专家模式（下一轮生效）"})
-        return
+        try:
+            runtime = await asyncio.to_thread(runtime.switch_expert_mode, True)
+            with _active_runtimes_lock:
+                _active_runtimes[runtime.thread_id] = runtime
+            await ws.send_json({"type": "command_result", "content": "已切换到专家模式（下一轮生效，将自动生成深度报告）"})
+            await ws.send_json({"type": "status", "content": "mode_changed", "mode": "expert"})
+        except Exception as exc:
+            await ws.send_json({"type": "error", "content": f"切换失败: {exc}"})
+        return runtime
 
     # /default — 切换默认模式
     if cmd_lower == "/default":
+        if not runtime.config.runtime.expert_mode:
+            await ws.send_json({"type": "command_result", "content": "当前已是默认模式"})
+            return runtime
         await ws.send_json({"type": "status", "content": "正在切换到默认模式..."})
-        await ws.send_json({"type": "command_result", "content": "已切换到默认模式（下一轮生效）"})
-        return
+        try:
+            runtime = await asyncio.to_thread(runtime.switch_expert_mode, False)
+            with _active_runtimes_lock:
+                _active_runtimes[runtime.thread_id] = runtime
+            await ws.send_json({"type": "command_result", "content": "已切换到默认模式"})
+            await ws.send_json({"type": "status", "content": "mode_changed", "mode": "default"})
+        except Exception as exc:
+            await ws.send_json({"type": "error", "content": f"切换失败: {exc}"})
+        return runtime
 
     # /model — 显示当前模型
     if cmd_lower == "/model":
@@ -563,7 +582,7 @@ async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> None:
             "type": "command_result",
             "content": f"当前模型: {model_name}",
         })
-        return
+        return runtime
 
     # /status — 显示运行状态
     if cmd_lower == "/status":
@@ -573,13 +592,14 @@ async def _handle_command(ws: WebSocket, cmd: str, runtime: AppRuntime) -> None:
             f"模式: {'专家' if runtime.config.runtime.expert_mode else '默认'}"
         )
         await ws.send_json({"type": "command_result", "content": status_info})
-        return
+        return runtime
 
     # 未知命令
     await ws.send_json({
         "type": "command_result",
         "content": f"未知命令: {cmd}。输入 /help 查看可用命令。",
     })
+    return runtime
 
 
 async def _stream_chat(
@@ -646,6 +666,41 @@ async def _stream_chat(
                 counters=counters,
             )
             await ws.send_json(serializable)
+
+        # 报告落盘：流式路径（SherlockingStreamClient.graph.astream）绕过了
+        # LeaderAgent.run()，需在此处手动保存 artifact，否则 final_report.md 不会生成。
+        # 逻辑与 agent.py 专家模式一致：优先取 ReportMiddleware 写入 state 的 final_report，
+        # 缺失时用 reporter 兜底合成（observations/sources → 结构化 Markdown）。
+        if ctx is not None and runtime.config.runtime.expert_mode and runtime.config.reporting.save_artifact:
+            try:
+                snapshot = runtime.leader_agent.graph.get_state(
+                    {"configurable": {"thread_id": runtime.thread_id}}
+                )
+                final_state = dict(snapshot.values) if snapshot and snapshot.values else {}
+                final_report = final_state.get("final_report")
+                if not final_report:
+                    report_result = runtime.capability_registry.get_reporter().generate_report(final_state, ctx)
+                    final_report = report_result.final_report
+                if final_report:
+                    artifact = runtime.capability_registry.get_artifact_store().save_artifact(
+                        content=final_report,
+                        output_dir=ctx.output_dir,
+                        title="Final Report",
+                        filename="final_report.md",
+                        metadata={"mode": "expert"},
+                    )
+                    ctx.journal.append(
+                        "report.generated",
+                        {
+                            "artifact_id": artifact.artifact_id,
+                            "title": artifact.title,
+                            "path": artifact.path,
+                            "mode": "expert",
+                        },
+                    )
+                    log.info("📄 研究报告已落盘 | %s", artifact.path)
+            except Exception as exc:
+                log.warning("报告落盘失败（不影响对话）: %s", exc)
 
         # 研究报告落盘通知：expert 模式会把 final_report.md 写入本次 run 的 artifacts 目录，
         # 推送事件给前端展示"下载报告"卡片（文件由下方 /api/report 接口鉴权下载）。
